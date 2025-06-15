@@ -8,9 +8,8 @@ from pathlib import Path
 from typing import List, Dict, Optional
 
 import aiohttp
-from aiogram import Bot, Dispatcher, F, html
+from aiogram import Bot, html
 from aiogram.enums import ParseMode
-from aiogram.types import Message
 from aiogram.client.default import DefaultBotProperties
 from dotenv import load_dotenv
 
@@ -695,21 +694,11 @@ class Scheduler:
 
 # Инициализация бота
 bot = Bot(token=config.BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
-dp = Dispatcher()
-# logging.getLogger('aiogram.dispatcher').setLevel(logging.CRITICAL)  # отключаем логи поллинга
-
-
-@dp.message(F.text == '/start')
-async def start_command(message: Message):
-    await message.answer("Бот мониторинга активен!")
 
 
 async def main():
     scheduler = Scheduler(bot)
-    await asyncio.gather(
-        scheduler.run(),
-        dp.start_polling(bot)
-    )
+    await asyncio.gather(scheduler.run())
 
 
 if __name__ == "__main__":
