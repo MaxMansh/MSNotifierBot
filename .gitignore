@@ -3,3 +3,9 @@
 .env
 logs
 cache
+config/__pycache__
+core/__pycache__
+core/entities/__pycache__
+core/services/api/__pycache__
+core/services/checkers/__pycache__
+utils/__pycache__
