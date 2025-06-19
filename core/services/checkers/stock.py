@@ -14,9 +14,10 @@ class StockChecker(BaseChecker):
         alerts_by_group = defaultdict(list)
         processed_count = 0
         alerted_count = 0
+        stats = {'zero_stock': 0, 'below_min': 0}  # Добавляем stats
 
         for product in filter(lambda p: p.needs_stock_check, products):
-            alert = self._check_product(product, cache)
+            alert = self._check_product(product, cache, stats)  # Передаем stats
             if alert:
                 alerts_by_group[product.group_path].append(alert)
                 alerted_count += 1
@@ -29,28 +30,52 @@ class StockChecker(BaseChecker):
                 await self.notifier.send(header, alerts)
 
         self.cache_manager.save(cache)
-        logger.info(f"Проверка остатков завершена. Товаров: {processed_count}, Уведомлений: {alerted_count}")
+        logger.info(
+            f"Проверка остатков завершена. Товаров: {processed_count}, "
+            f"Уведомлений: {alerted_count}. "
+            f"Нулевых остатков: {stats['zero_stock']}, "
+            f"Ниже минимума: {stats['below_min']}"
+        )
 
-    def _check_product(self, product: Product, cache: Dict) -> Optional[str]:
+    def _check_product(self, product: Product, cache: Dict, stats: dict) -> Optional[str]:
         cached_data = cache.get(product.id, {})
         current_stock = product.stock
         min_balance = product.min_balance
         alert = None
 
-        if current_stock <= min_balance and not cached_data.get('below_min_reported', False):
-            alert = self._create_min_balance_alert(product)
-            cache[product.id] = {
-                'below_min_reported': True,
-                'zero_reported': False,
-                'last_stock': current_stock
-            }
-        else:
-            # Обновляем кэш, но не отправляем уведомление
-            cache[product.id] = {
-                'below_min_reported': cached_data.get('below_min_reported', False),
-                'zero_reported': cached_data.get('zero_reported', False),
-                'last_stock': current_stock
-            }
+        is_zero = current_stock <= 0
+        is_below_min = current_stock <= min_balance
+        was_below_min = cached_data.get('below_min_reported', False)
+        last_stock = cached_data.get('last_stock', None)
+
+        logger.debug(
+            f"Проверка товара {product.name} (ID: {product.id}): "
+            f"остаток={current_stock}, минимум={min_balance}, "
+            f"был ниже мин={was_below_min}, последний остаток={last_stock}"
+        )
+
+        # Логика для нулевого остатка
+        if is_zero:
+            stats['zero_stock'] += 1
+            if not cached_data.get('zero_reported', False):
+                alert = self._create_zero_stock_alert(product)
+                logger.info(f"Обнаружен нулевой остаток: {product.name} (ID: {product.id})")
+        # Логика для остатка ниже минимума
+        elif is_below_min:
+            stats['below_min'] += 1
+
+            # Если ранее не было уведомления или остаток поднялся выше минимума и снова упал
+            if not was_below_min or (last_stock is not None and last_stock > min_balance):
+                alert = self._create_min_balance_alert(product)
+                logger.info(f"Обнаружен остаток ниже минимума: {product.name} (ID: {product.id})")
+
+        # Обновляем кэш
+        cache[product.id] = {
+            'below_min_reported': is_below_min,
+            'zero_reported': is_zero,
+            'last_stock': current_stock,
+            'last_check': datetime.now().isoformat()
+        }
 
         return alert
 
