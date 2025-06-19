@@ -7,7 +7,6 @@ from core.services.api.base_api import BaseAPI
 import logging
 import ssl
 
-
 logger = logging.getLogger(__name__)
 
 
@@ -37,10 +36,16 @@ class CheckerScheduler:
 
                             if products:
                                 logger.debug(f"Получено товаров: {len(products)}")
-                                await asyncio.gather(
-                                    *[checker.process(products) for checker in self.checkers],
-                                    return_exceptions=True
-                                )
+
+                                # Последовательно выполняем проверки
+                                logger.info("=== НАЧАЛО ПРОВЕРКИ ОСТАТКОВ ===")
+                                await self.checkers[0].process(products)  # StockChecker
+                                logger.info("=== ПРОВЕРКА ОСТАТКОВ ЗАВЕРШЕНА ===")
+
+                                logger.info("=== НАЧАЛО ПРОВЕРКИ СРОКОВ ГОДНОСТИ ===")
+                                await self.checkers[1].process(products)  # ExpirationChecker
+                                logger.info("=== ПРОВЕРКА СРОКОВ ГОДНОСТИ ЗАВЕРШЕНА ===")
+
                             else:
                                 logger.warning("Не получено ни одного товара для проверки")
                 except TimeoutError:
