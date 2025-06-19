@@ -14,7 +14,7 @@ class MoyskladAPI(BaseAPI):
         super().__init__(token, self.BASE_URL)
         self.retry_count = 3
         self.retry_delay = 5
-        logger.info("Инициализирован клиент API МойСклад")
+        logger.debug("Инициализирован клиент API МойСклад")
 
     async def fetch_all_product_folders(self, session: aiohttp.ClientSession) -> Dict[str, Dict]:
         all_folders = {}

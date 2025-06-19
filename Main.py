@@ -79,7 +79,7 @@ async def main():
                 sig,
                 lambda: asyncio.create_task(shutdown(scheduler, bot, logger)))
 
-        logger.info("=== ЗАПУСК ОСНОВНОГО ЦИКЛА ===")
+        logger.debug("=== ЗАПУСК ОСНОВНОГО ЦИКЛА ===")
         await scheduler.run()
 
     except Exception as e:

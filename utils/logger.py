@@ -22,7 +22,7 @@ class AppLogger:
 
         # Форматтер для логов
         formatter = logging.Formatter(
-            "[{asctime}] #{levelname:8} {filename}:{lineno} - {message}\n"
+            "[{asctime}] #{levelname:8} - {message}\n"
             "────────────────────────────────────────────",
             style="{"
         )

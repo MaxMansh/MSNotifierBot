@@ -32,11 +32,11 @@ class CheckerScheduler:
                 try:
                     async with asyncio.timeout(300):  # 5 минут на весь цикл
                         async with aiohttp.ClientSession() as session:
-                            logger.info("Загрузка данных о товарах из API...")
+                            logger.debug("Загрузка данных о товарах из API...")
                             products = await self._fetch_products(session)
 
                             if products:
-                                logger.info(f"Получено товаров: {len(products)}")
+                                logger.debug(f"Получено товаров: {len(products)}")
                                 await asyncio.gather(
                                     *[checker.process(products) for checker in self.checkers],
                                     return_exceptions=True
@@ -93,7 +93,7 @@ class CheckerScheduler:
                     except Exception as e:
                         logger.error(f"Ошибка создания продукта: {str(e)}")
 
-                logger.info(f"Успешно создано объектов Product: {len(products)}")
+                logger.debug(f"Успешно создано объектов Product: {len(products)}")
                 return products
 
         except Exception as e:
