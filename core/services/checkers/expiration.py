@@ -39,18 +39,31 @@ class ExpirationChecker(BaseChecker):
         logger.info(f"Проверка сроков годности завершена. Товаров: {processed_count}, Уведомлений: {len(alerts_by_group)}")
         logger.info(f"Просроченных: {expired_count}, С истекающим сроком: {near_expired_count}")
 
-
     def _check_product(self, product: Product, cache: Dict) -> (Optional[str], bool):
         days_left = (product.expiration_date - datetime.now()).days
         cached_data = cache.get(product.id, {})
 
+        # Преобразуем expiration_date в строку для JSON
+        expiration_date_str = product.expiration_date.strftime('%Y-%m-%d')
+
+        # Проверяем, изменилась ли дата истечения срока
+        if cached_data.get('expiration_date') != expiration_date_str:
+            # Если дата изменилась, сбрасываем кэш для этого товара
+            cached_data = {'expiration_date': expiration_date_str}
+            cache[product.id] = cached_data
+
+        # Проверяем, нужно ли отправить уведомление
         if days_left < 0 and not cached_data.get('was_expired', False):
-            cache[product.id] = {'was_expired': True}
+            cache[product.id] = {**cached_data, 'was_expired': True}
             return self._create_expired_alert(product), True
 
-        if 0 <= days_left <= self.alert_days and not cached_data.get('was_near_expired', False):
-            cache[product.id] = {'was_near_expired': True}
-            return self._create_near_expired_alert(product, days_left), False
+        if 0 <= days_left <= self.alert_days:
+            if days_left >= 7 and not cached_data.get('was_notified_7_days', False):
+                cache[product.id] = {**cached_data, 'was_notified_7_days': True}
+                return self._create_near_expired_alert(product, days_left), False
+            if days_left <= 3 and not cached_data.get('was_notified_3_days', False):
+                cache[product.id] = {**cached_data, 'was_notified_3_days': True}
+                return self._create_near_expired_alert(product, days_left), False
 
         return None, False
 
