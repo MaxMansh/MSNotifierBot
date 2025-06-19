@@ -17,6 +17,8 @@ class ExpirationChecker(BaseChecker):
         cache = self.cache_manager.load()
         alerts_by_group = defaultdict(list)
         expired_count = 0
+        processed_count = 0
+        alerted_count = 0
         near_expired_count = 0
 
         for product in filter(lambda p: p.needs_expiration_check, products):
@@ -34,7 +36,9 @@ class ExpirationChecker(BaseChecker):
                 await self.notifier.send(header, alerts)
 
         self.cache_manager.save(cache)
-        logger.info(f"Expiration check completed. Expired: {expired_count}, Near expired: {near_expired_count}")
+        logger.info(f"Проверка сроков годности завершена. Товаров: {processed_count}, Уведомлений: {len(alerts_by_group)}")
+        logger.info(f"Просроченных: {expired_count}, С истекающим сроком: {near_expired_count}")
+
 
     def _check_product(self, product: Product, cache: Dict) -> (Optional[str], bool):
         days_left = (product.expiration_date - datetime.now()).days

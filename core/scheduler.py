@@ -7,6 +7,7 @@ from core.services.api.base_api import BaseAPI
 import logging
 import ssl
 
+
 logger = logging.getLogger(__name__)
 
 
@@ -20,30 +21,30 @@ class CheckerScheduler:
 
     async def run(self) -> None:
         self._running = True
-        logger.info("Планировщик проверок запущен")
+        logger.info(f"Запуск планировщика с интервалом {self.interval} минут")
 
         while self._running:
             start_time = datetime.now()
-            logger.debug("Начало нового цикла проверок")
+            logger.info("=== НАЧАЛО ЦИКЛА ПРОВЕРОК ===")
 
             try:
                 # Добавляем таймаут для всего цикла проверок
                 try:
                     async with asyncio.timeout(300):  # 5 минут на весь цикл
                         async with aiohttp.ClientSession() as session:
-                            logger.debug("Загрузка товаров...")
+                            logger.info("Загрузка данных о товарах из API...")
                             products = await self._fetch_products(session)
 
                             if products:
-                                logger.debug(f"Получено {len(products)} товаров")
+                                logger.info(f"Получено товаров: {len(products)}")
                                 await asyncio.gather(
                                     *[checker.process(products) for checker in self.checkers],
                                     return_exceptions=True
                                 )
                             else:
-                                logger.warning("Не получено товаров для проверки")
+                                logger.warning("Не получено ни одного товара для проверки")
                 except TimeoutError:
-                    logger.error("Таймаут цикла проверок (5 минут)")
+                    logger.error("Таймаут цикла проверок (превышено 5 минут)")
                     continue
 
             except asyncio.CancelledError:
@@ -53,11 +54,13 @@ class CheckerScheduler:
                 logger.error(f"Ошибка в цикле проверок: {str(e)}", exc_info=True)
 
             duration = (datetime.now() - start_time).total_seconds()
-            logger.debug(f"Цикл завершен за {duration:.2f} сек.")
+            minutes, seconds = divmod(duration, 60)
+            logger.info(f"Цикл проверок завершен за {int(minutes)} мин. {int(seconds)} сек.")
 
             if self._running:
                 sleep_time = max(0, self.interval * 60 - duration)
-                logger.debug(f"Ожидание {sleep_time:.0f} сек. до следующего цикла...")
+                sleep_min, sleep_sec = divmod(sleep_time, 60)
+                logger.info(f"Ожидание следующего цикла: {int(sleep_min)} мин. {int(sleep_sec)} сек...")
                 await asyncio.sleep(sleep_time)
 
     async def stop(self):

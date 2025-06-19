@@ -13,11 +13,6 @@ from core.scheduler import CheckerScheduler, logger
 from utils.logger import AppLogger
 from utils.cacher import CacheManager
 
-import platform
-import logging
-logging.basicConfig(level=logging.DEBUG)
-logger.debug(f"Python version: {platform.python_version()}")
-logger.debug(f"System: {platform.system()} {platform.release()}")
 
 async def shutdown(scheduler, bot, logger):
     logger.info("Завершение работы...")
@@ -43,7 +38,7 @@ async def main():
                 default=DefaultBotProperties(parse_mode=ParseMode.HTML),
                 timeout=30  # 30 секунд таймаут
             )
-            logger.debug("Бот успешно инициализирован")
+            logger.info("Бот успешно инициализирован")
         except Exception as e:
             logger.error(f"Ошибка инициализации бота: {str(e)}")
             raise
