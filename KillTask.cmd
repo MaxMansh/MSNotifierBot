@@ -1,0 +1,1 @@
+taskkill /F /FI "WindowTitle eq  Bot" /T
