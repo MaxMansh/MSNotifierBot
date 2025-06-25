@@ -4,9 +4,9 @@ from collections import defaultdict
 from core.entities.product import Product
 from core.services.checkers.base import BaseChecker
 from aiogram import html
-import logging
+from utils.logger import AppLogger
 
-logger = logging.getLogger(__name__)
+logger = AppLogger().get_logger(__name__)
 
 class ExpirationChecker(BaseChecker):
     def __init__(self, notifier, cache_manager, alert_days: int = 7):
@@ -36,8 +36,12 @@ class ExpirationChecker(BaseChecker):
                 await self.notifier.send(header, alerts)
 
         self.cache_manager.save(cache)
-        logger.info(f"Проверка сроков годности завершена. Товаров: {processed_count}, Уведомлений: {len(alerts_by_group)}")
-        logger.info(f"Просроченных: {expired_count}, С истекающим сроком: {near_expired_count}")
+        logger.info(f"Проверка сроков годности завершена."
+                    f"\nТоваров: {processed_count}"
+                    f"\nУведомлений: {len(alerts_by_group)}"
+                    f"\nПросроченных: {expired_count} "
+                    f"\nС истекающим сроком: {near_expired_count}"
+        )
 
     def _check_product(self, product: Product, cache: Dict) -> (Optional[str], bool):
         days_left = (product.expiration_date - datetime.now()).days

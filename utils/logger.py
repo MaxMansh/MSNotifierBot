@@ -1,66 +1,68 @@
 import logging
+from logging.handlers import TimedRotatingFileHandler
 from pathlib import Path
-from datetime import datetime, timedelta
-import sys
-import logging.handlers
-
+from config.config import Settings
 
 class AppLogger:
-    def __init__(self, log_dir: Path, max_log_age: timedelta, name: str = "bot"):
-        self._log_dir = log_dir
-        self._max_age = max_log_age
-        self._setup_logging(name)
-        self._cleanup_old_logs()
+    _instance = None
 
-    def _setup_logging(self, name: str):
-        # Создаем директорию для логов если не существует
-        self._log_dir.mkdir(parents=True, exist_ok=True)
+    def __new__(cls, logs_dir: Path = None, days_to_keep: int = None):
+        if cls._instance is None:
+            cls._instance = super().__new__(cls)
+            cls._instance.__initialized = False
+        return cls._instance
 
-        # Основной логгер приложения
-        logger = logging.getLogger(name)
-        logger.setLevel(logging.DEBUG)  # Ловим все сообщения от DEBUG и выше
+    def __init__(self, logs_dir: Path = None, days_to_keep: int = None):
+        if self.__initialized:
+            return
 
-        # Форматтер для логов
+        self.__initialized = True
+        self.logs_dir = logs_dir or Path("data/logs")
+        self.days_to_keep = days_to_keep if days_to_keep is not None else Settings().DAYS_TO_KEEP
+        self._ensure_logs_dir_exists()
+        self.logger = self._setup_logger()
+
+
+    def _ensure_logs_dir_exists(self):
+        """Создаёт директорию для логов, если её нет"""
+        try:
+            self.logs_dir.mkdir(parents=True, exist_ok=True)
+        except Exception as e:
+            print(f"Failed to create logs directory: {e}")
+            raise
+
+    def _setup_logger(self) -> logging.Logger:
+        """Настройка основного логгера"""
+        logger = logging.getLogger("app")
+        logger.setLevel(logging.INFO)
+
         formatter = logging.Formatter(
-            "[{asctime}] #{levelname:8} - {message}\n"
-            "────────────────────────────────────────────",
+            "[{asctime}] #{levelname:8} {module}:{lineno} - {message}",
             style="{"
         )
 
-        # Файловый обработчик с ротацией по дням
-        log_file = self._log_dir / f"MainLog - {datetime.now().strftime('%d.%m.%Y')}.log"
-        file_handler = logging.FileHandler(log_file, encoding='utf-8')
-        file_handler.setFormatter(formatter)
-        file_handler.setLevel(logging.INFO)
+        log_file = self.logs_dir / f"Main.log"
 
-        # Консольный обработчик (только INFO и выше)
-        # console_handler = logging.StreamHandler(sys.stdout)
-        # console_handler.setFormatter(formatter)
-        # console_handler.setLevel(logging.INFO)
+        handler = TimedRotatingFileHandler(
+            log_file,
+            when="S",
+            interval=1,
+            backupCount=self.days_to_keep,
+            encoding="utf-8"
+        )
+        handler.setFormatter(formatter)
+        logger.addHandler(handler)
 
-        # Настраиваем корневой логгер для перехвата всех логов
-        root_logger = logging.getLogger()
-        root_logger.setLevel(logging.DEBUG)
-        root_logger.addHandler(file_handler)
-        # root_logger.addHandler(console_handler)
+        return logger
 
-        # Перехватываем логи asyncio и aiohttp
-        logging.getLogger('asyncio').setLevel(logging.DEBUG)
-        logging.getLogger('aiohttp').setLevel(logging.DEBUG)
-        logging.getLogger('aiogram').setLevel(logging.DEBUG)
+    def get_logger(self, name: str = None) -> logging.Logger:
+        """Возвращает логгер для конкретного модуля"""
+        if name:
+            return logging.getLogger(f"app.{name}")
+        return self.logger
 
-        self._logger = logger
 
-    def _cleanup_old_logs(self):
-        now = datetime.now()
-        for log_file in self._log_dir.glob("*.log"):
-            try:
-                file_date_str = log_file.stem.split('_')[-1]
-                file_date = datetime.strptime(file_date_str, "%Y%m%d")
-                if (now - file_date) > self._max_age:
-                    log_file.unlink()
-            except (ValueError, IndexError):
-                continue
-
-    def __getattr__(self, name):
-        return getattr(self._logger, name)
+# Fallback логгер на случай проблем с инициализацией
+_fallback_logger = logging.getLogger("app.fallback")
+_fallback_logger.addHandler(logging.StreamHandler())
+logger = _fallback_logger

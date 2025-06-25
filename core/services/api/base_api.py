@@ -1,11 +1,11 @@
-import logging
 import ssl
 import asyncio
 from abc import ABC, abstractmethod
 import aiohttp
 from typing import Dict, List, Any
+from utils.logger import AppLogger
 
-logger = logging.getLogger(__name__)
+logger = AppLogger().get_logger(__name__)
 
 class BaseAPI(ABC):
     def __init__(self, token: str, base_url: str):

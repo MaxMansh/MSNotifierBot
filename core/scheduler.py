@@ -1,13 +1,15 @@
 import asyncio
 import aiohttp
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import List, Optional
 from core.entities.product import Product
 from core.services.api.base_api import BaseAPI
-import logging
 import ssl
+from utils.logger import AppLogger
 
-logger = logging.getLogger(__name__)
+logger = AppLogger().get_logger(__name__)
+
+
 
 
 class CheckerScheduler:
@@ -24,7 +26,7 @@ class CheckerScheduler:
 
         while self._running:
             start_time = datetime.now()
-            logger.info("=== НАЧАЛО ЦИКЛА ПРОВЕРОК ===")
+            logger.info("=== ИНИЦИАЛИЗАЦИЯ ===")
 
             try:
                 # Добавляем таймаут для всего цикла проверок

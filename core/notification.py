@@ -2,10 +2,9 @@ from aiogram import Bot
 from aiogram.enums import ParseMode
 from typing import List
 import asyncio
-import logging
+from utils.logger import AppLogger
 
-logger = logging.getLogger(__name__)
-
+logger = AppLogger().get_logger(__name__)
 
 class TelegramNotifier:
     def __init__(self, bot: Bot, chat_id: str, message_limit: int = 4096):

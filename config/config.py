@@ -7,7 +7,7 @@ class Settings(BaseSettings):
     CHAT_ID: str
     CHECK_INTERVAL_MINUTES: int = 120
     TG_MESSAGE_LIMIT: int = 4096
-    LOG_RESET_DAYS: int = 30
+    DAYS_TO_KEEP: int = 30
     CACHE_RESET_DAYS: int = 30
     API_REQUEST_LIMIT: int = 500
     API_REQUEST_DELAY: int = 5
@@ -40,3 +40,6 @@ class PathManager:
     @property
     def expiration_cache(self) -> Path:
         return self.cache_dir / "expiration_cache.json"
+
+    def glob(self, param):
+        pass

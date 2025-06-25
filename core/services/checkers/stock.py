@@ -4,9 +4,9 @@ from collections import defaultdict
 from core.entities.product import Product
 from core.services.checkers.base import BaseChecker
 from aiogram import html
-import logging
+from utils.logger import AppLogger
 
-logger = logging.getLogger(__name__)
+logger = AppLogger().get_logger(__name__)
 
 class StockChecker(BaseChecker):
     async def process(self, products: List[Product]) -> None:
@@ -31,10 +31,11 @@ class StockChecker(BaseChecker):
 
         self.cache_manager.save(cache)
         logger.info(
-            f"Проверка остатков завершена. Товаров: {processed_count}, "
-            f"Уведомлений: {alerted_count}. "
-            f"Нулевых остатков: {stats['zero_stock']}, "
-            f"Ниже минимума: {stats['below_min']}"
+            f"Проверка остатков завершена. "
+            f"\nТоваров: {processed_count} "
+            f"\nУведомлений: {alerted_count} "
+            f"\nНулевых остатков: {stats['zero_stock']} "
+            f"\nНиже минимума: {stats['below_min']}"
         )
 
     def _check_product(self, product: Product, cache: Dict, stats: dict) -> Optional[str]:

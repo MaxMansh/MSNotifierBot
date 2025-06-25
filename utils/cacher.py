@@ -2,9 +2,11 @@ import json
 from pathlib import Path
 from datetime import datetime, timedelta
 from typing import Dict, Any
-import logging
+from utils.logger import AppLogger
 
-logger = logging.getLogger(__name__)
+logger = AppLogger().get_logger(__name__)
+
+
 
 class CacheManager:
     def __init__(self, cache_file: Path, max_age_days: int):

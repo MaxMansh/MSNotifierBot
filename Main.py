@@ -2,16 +2,16 @@ import asyncio
 import signal
 import ssl
 from datetime import datetime, timedelta
-from config.config import Settings, PathManager
 from aiogram import Bot
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 from core.services.api.moysklad import MoyskladAPI
 from core.services.checkers import StockChecker, ExpirationChecker
 from core.notification import TelegramNotifier
-from core.scheduler import CheckerScheduler, logger
-from utils.logger import AppLogger
+from core.scheduler import CheckerScheduler
 from utils.cacher import CacheManager
+from config.config import PathManager, Settings
+from utils.logger import AppLogger
 
 
 async def shutdown(scheduler, bot, logger):
@@ -20,14 +20,17 @@ async def shutdown(scheduler, bot, logger):
     await bot.session.close()
     logger.info("Ресурсы освобождены")
 
-
 async def main():
+    # Инициализация конфигурации
     config = Settings()
-    paths = PathManager()
-    logger = AppLogger(
-        log_dir=paths.logs_dir,
-        max_log_age=timedelta(days=config.LOG_RESET_DAYS)
-    )
+    paths = PathManager(base_dir="data")
+
+    # Инициализация логгера
+    app_logger = AppLogger(logs_dir=paths.logs_dir, days_to_keep=config.DAYS_TO_KEEP)
+    global logger
+    logger = app_logger.get_logger("main")
+
+    logger.info("Приложение запущено")
 
     try:
         logger.info("Инициализация бота...")
@@ -77,7 +80,8 @@ async def main():
         for sig in (signal.SIGINT, signal.SIGTERM):
             loop.add_signal_handler(
                 sig,
-                lambda: asyncio.create_task(shutdown(scheduler, bot, logger)))
+                lambda s=scheduler, b=bot, l=logger: asyncio.create_task(shutdown(s, b, l))
+            )
 
         logger.debug("=== ЗАПУСК ОСНОВНОГО ЦИКЛА ===")
         await scheduler.run()

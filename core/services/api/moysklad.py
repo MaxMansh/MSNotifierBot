@@ -2,10 +2,9 @@ from typing import Dict, List
 import aiohttp
 import asyncio
 from core.services.api.base_api import BaseAPI
-import logging
+from utils.logger import AppLogger
 
-logger = logging.getLogger(__name__)
-
+logger = AppLogger().get_logger(__name__)
 
 class MoyskladAPI(BaseAPI):
     BASE_URL = "https://api.moysklad.ru/api/remap/1.2"
@@ -19,7 +18,7 @@ class MoyskladAPI(BaseAPI):
     async def fetch_all_product_folders(self, session: aiohttp.ClientSession) -> Dict[str, Dict]:
         all_folders = {}
         offset = 0
-        logger.info("Загрузка групп товаров...")
+        logger.info("Начало загрузки групп товаров...")
 
         while True:
             params = {"limit": 500, "offset": offset}
@@ -65,7 +64,7 @@ class MoyskladAPI(BaseAPI):
                     offset += len(data['rows'])
                     await asyncio.sleep(1)
 
-                logger.info(f"Успешно загружено товаров: {len(products)}")
+                logger.info(f"Загружено товаров: {len(products)}")
                 return products
 
             except Exception as e:
