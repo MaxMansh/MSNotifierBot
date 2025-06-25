@@ -28,7 +28,7 @@ class AppLogger:
         try:
             self.logs_dir.mkdir(parents=True, exist_ok=True)
         except Exception as e:
-            print(f"Ошибка при создании директории для логов: {e}")
+            print(f"Failed to create logs directory: {e}")
             raise
 
     def _setup_logger(self) -> logging.Logger:
