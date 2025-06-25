@@ -19,6 +19,7 @@ async def shutdown(scheduler, bot, logger):
     await bot.session.close()
     logger.info("Ресурсы освобождены")
 
+
 async def main():
     # Инициализация конфигурации
     config = Settings()
@@ -74,16 +75,30 @@ async def main():
             logger=logger
         )
 
-        logger.debug("Настройка обработчиков сигналов...")
-        loop = asyncio.get_running_loop()
-        for sig in (signal.SIGINT, signal.SIGTERM):
-            loop.add_signal_handler(
-                sig,
-                lambda s=scheduler, b=bot, l=logger: asyncio.create_task(shutdown(s, b, l))
-            )
+        # Создаем задачу для обработки завершения работы
+        shutdown_task = None
+
+        def handle_signal():
+            nonlocal shutdown_task
+            if shutdown_task is None:
+                shutdown_task = asyncio.create_task(shutdown(scheduler, bot, logger))
+
+        # Настройка обработчиков сигналов только для Unix-систем
+        if hasattr(signal, 'SIGINT'):
+            try:
+                loop = asyncio.get_running_loop()
+                for sig in (signal.SIGINT, signal.SIGTERM):
+                    loop.add_signal_handler(sig, handle_signal)
+            except NotImplementedError:
+                # Windows не поддерживает add_signal_handler
+                pass
 
         logger.debug("=== ЗАПУСК ОСНОВНОГО ЦИКЛА ===")
-        await scheduler.run()
+        try:
+            await scheduler.run()
+        except asyncio.CancelledError:
+            # Обработка отмены задачи (например, при нажатии Ctrl+C)
+            await shutdown(scheduler, bot, logger)
 
     except Exception as e:
         logger.error(f"Критическая ошибка: {str(e)}", exc_info=True)
@@ -92,6 +107,7 @@ async def main():
             logger.debug("Закрытие сессии бота...")
             await bot.session.close()
         logger.info("Работа бота завершена")
+
 
 if __name__ == "__main__":
     try:
