@@ -5,7 +5,7 @@ class Settings(BaseSettings):
     BOT_TOKEN: str
     MS_TOKEN: str
     CHAT_ID: str
-    CHECK_INTERVAL_MINUTES: int = 720
+    CHECK_INTERVAL_MINUTES: int = 120
     TG_MESSAGE_LIMIT: int = 4096
     DAYS_TO_KEEP: int = 30
     CACHE_RESET_DAYS: int = 30
