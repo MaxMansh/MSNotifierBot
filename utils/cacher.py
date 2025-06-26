@@ -40,7 +40,7 @@ class CacheManager:
 
     def save(self, data: Dict[str, Any]) -> None:
         try:
-            logger.debug(f"Сохранение {len(data)} записей в кэш файл {self.cache_file}")
+            logger.info(f"Сохранение {len(data)} записей в кэш файл {self.cache_file}")
             with open(self.cache_file, 'w', encoding='utf-8') as f:
                 json.dump(data, f, indent=2, ensure_ascii=False)
             logger.info(f"Кэш успешно сохранен в {self.cache_file}")
@@ -54,9 +54,9 @@ class CacheManager:
             file_mtime = datetime.fromtimestamp(self.cache_file.stat().st_mtime)
             is_expired = (datetime.now() - file_mtime) > self.max_age
             if is_expired:
-                logger.debug(f"Проверка срока годности кэша: файл изменен {file_mtime}, срок истёк")
+                logger.info(f"Проверка срока годности кэша: файл изменен {file_mtime}, срок истёк")
             else:
-                logger.debug(f"Проверка срока годности кэша: файл изменен {file_mtime}, срок действителен")
+                logger.info(f"Проверка срока годности кэша: файл изменен {file_mtime}, срок действителен")
             return is_expired
         except Exception as e:
             logger.error(f"Ошибка проверки срока годности кэша: {str(e)}")
