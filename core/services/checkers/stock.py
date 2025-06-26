@@ -3,14 +3,16 @@ from typing import List, Dict, Optional
 from collections import defaultdict
 from core.entities.product import Product
 from core.services.checkers.base import BaseChecker
-from aiogram import html
 from utils.logger import AppLogger
+from core.notification import StockAlert  # Импорт из нового модуля
 
 logger = AppLogger().get_logger(__name__)
+
 
 class StockChecker(BaseChecker):
     async def process(self, products: List[Product]) -> None:
         cache = self.cache_manager.load()
+        logger.info("Идёт обработка товаров...")
         alerts_by_group = defaultdict(list)
         processed_count = 0
         alerted_count = 0
@@ -26,7 +28,7 @@ class StockChecker(BaseChecker):
         if alerts_by_group:
             logger.info(f"Найдено товаров для уведомления: {alerted_count}")
             for group_path, alerts in alerts_by_group.items():
-                header = f"📊 {html.bold('УВЕДОМЛЕНИЯ ПО ОСТАТКАМ')} ({group_path})"
+                header = StockAlert.create_stock_header(group_path)
                 await self.notifier.send(header, alerts)
 
         self.cache_manager.save(cache)
@@ -59,16 +61,16 @@ class StockChecker(BaseChecker):
         if is_zero:
             stats['zero_stock'] += 1
             if not cached_data.get('zero_reported', False):
-                alert = self._create_zero_stock_alert(product)
-                logger.info(f"Обнаружен нулевой остаток: {product.name} (ID: {product.id})")
+                alert = StockAlert.create_zero_stock_alert(product)  # Используем функцию из notifications
+                logger.debug(f"Обнаружен нулевой остаток: {product.name} (ID: {product.id})")
         # Логика для остатка ниже минимума
         elif is_below_min:
             stats['below_min'] += 1
 
             # Если ранее не было уведомления или остаток поднялся выше минимума и снова упал
             if not was_below_min or (last_stock is not None and last_stock > min_balance):
-                alert = self._create_min_balance_alert(product)
-                logger.info(f"Обнаружен остаток ниже минимума: {product.name} (ID: {product.id})")
+                alert = StockAlert.create_min_balance_alert(product)  # Используем функцию из notifications
+                logger.debug(f"Обнаружен остаток ниже минимума: {product.name} (ID: {product.id})")
 
         # Обновляем кэш
         cache[product.id] = {
@@ -79,17 +81,3 @@ class StockChecker(BaseChecker):
         }
 
         return alert
-
-    def _create_min_balance_alert(self, product: Product) -> str:
-        return (
-            f"⚠️ {html.bold(f'Товар: {product.name} достиг минимума!')}\n"
-            f"▸ Остаток: {int(product.stock)} (минимум: {int(product.min_balance)})\n"
-            f"▸ {datetime.now().strftime('%d.%m.%Y %H:%M')}"
-        )
-
-    def _create_zero_stock_alert(self, product: Product) -> str:
-        return (
-            f"🛑️ {html.bold(f'Товар: {product.name} закончился!')}\n"
-            f"▸ Остаток: {int(product.stock)} (минимум: {int(product.min_balance)})\n"
-            f"▸ {datetime.now().strftime('%d.%m.%Y %H:%M')}"
-        )
