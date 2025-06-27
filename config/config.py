@@ -41,5 +41,9 @@ class PathManager:
     def expiration_cache(self) -> Path:
         return self.cache_dir / "expiration_cache.json"
 
+    @property
+    def phone_cache(self) -> Path:  # Добавить для кэша номеров
+        return self.cache_dir / "phones.json"
+
     def glob(self, param):
         pass

@@ -2,6 +2,7 @@ from typing import Dict, List, Any
 import aiohttp
 import asyncio
 from core.services.api.base_api import BaseAPI
+from utils import CacheManager
 from utils.logger import AppLogger
 
 logger = AppLogger().get_logger(__name__)
@@ -14,6 +15,42 @@ class MoyskladAPI(BaseAPI):
         self.retry_count = 3
         self.retry_delay = 5
         logger.debug("Инициализирован клиент API МойСклад")
+
+    async def initialize_counterparties_cache(self, cache_manager: CacheManager) -> bool:
+        """Загружает контрагентов и сохраняет в кэш"""
+        try:
+            async with aiohttp.ClientSession() as session:
+                counterparties = await self.load_counterparties(session)
+                for phone, name in counterparties.items():
+                    cache_manager.add_counterparty(phone, name)
+                logger.info(f"Инициализирован кэш контрагентов: {len(counterparties)} записей")
+                return True
+        except Exception as e:
+            logger.error(f"Ошибка инициализации кэша: {str(e)}")
+            return False
+
+    async def load_counterparties(self, session: aiohttp.ClientSession) -> dict:
+        """Загружает всех контрагентов и возвращает словарь {phone: name}"""
+        counterparties = {}
+        offset = 0
+
+        while True:
+            params = {"limit": 500, "offset": offset}
+            try:
+                data = await self._make_request(session, "entity/counterparty", params)
+                for item in data.get('rows', []):
+                    if phone := item.get('phone'):
+                        counterparties[phone] = item.get('name', phone)
+
+                if len(data.get('rows', [])) < 500:
+                    break
+                offset += len(data['rows'])
+                await asyncio.sleep(1)
+            except Exception as e:
+                logger.error(f"Ошибка загрузки контрагентов: {str(e)}")
+                break
+
+        return counterparties
 
     async def fetch_all_products(self, session: aiohttp.ClientSession) -> List[Dict[str, Any]]:
         """Основной метод для получения товаров (оставлен без изменений)"""

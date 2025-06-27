@@ -1,7 +1,9 @@
 import asyncio
 import signal
 import sys
-from aiogram import Bot, Dispatcher, types
+
+import aiohttp
+from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 from core.services.api.moysklad import MoyskladAPI
@@ -23,6 +25,7 @@ class BotApplication:
         self.logger = None
         self.config = None
         self.paths = None
+        self.phone_cache = None
 
     async def shutdown(self, sig=None):
         """Корректное завершение работы"""
@@ -76,11 +79,6 @@ class BotApplication:
         api = MoyskladAPI(self.config.MS_TOKEN)
         self.logger.info("API клиент создан")
 
-        # Настройка диспетчера
-        self.dp = Dispatcher()
-        self.dp["api"] = api
-        self.dp.include_router(phone_router)
-
         # Инициализация сервисов
         notifier = TelegramNotifier(
             self.bot,
@@ -108,6 +106,22 @@ class BotApplication:
             check_interval=self.config.CHECK_INTERVAL_MINUTES,
             logger=self.logger
         )
+
+        # Инициализация кэша телефонов
+        self.phone_cache = CacheManager(
+            self.paths.phone_cache,
+            self.config.CACHE_RESET_DAYS
+        )
+
+        # Загрузка контрагентов через API
+        if not await api.initialize_counterparties_cache(self.phone_cache):
+            self.logger.warning("Не удалось загрузить контрагентов при старте")
+
+        # Настройка диспетчера
+        self.dp = Dispatcher()
+        self.dp["api"] = api
+        self.dp["phone_cache"] = self.phone_cache
+        self.dp.include_router(phone_router)
 
         # Настройка обработчиков сигналов
         if hasattr(signal, 'SIGINT'):

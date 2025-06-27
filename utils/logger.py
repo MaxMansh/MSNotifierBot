@@ -34,7 +34,7 @@ class AppLogger:
     def _setup_logger(self) -> logging.Logger:
         """Настройка основного логгера"""
         logger = logging.getLogger("app")
-        logger.setLevel(logging.INFO)
+        logger.setLevel(logging.DEBUG)
 
         formatter = logging.Formatter(
             "[{asctime}] #{levelname:8} {module}:{lineno} - {message}",
