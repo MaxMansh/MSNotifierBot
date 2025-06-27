@@ -1,4 +1,4 @@
-from typing import Dict, List
+from typing import Dict, List, Any
 import aiohttp
 import asyncio
 from core.services.api.base_api import BaseAPI
@@ -14,6 +14,54 @@ class MoyskladAPI(BaseAPI):
         self.retry_count = 3
         self.retry_delay = 5
         logger.debug("Инициализирован клиент API МойСклад")
+
+    async def fetch_all_products(self, session: aiohttp.ClientSession) -> List[Dict[str, Any]]:
+        """Основной метод для получения товаров (оставлен без изменений)"""
+        logger.info("Начало загрузки товаров...")
+        try:
+            folders = await self.fetch_all_product_folders(session)
+            products = []
+            offset = 0
+
+            while True:
+                params = {"limit": 500, "offset": offset, "filter": "type=product"}
+                data = await self._make_request(session, "entity/assortment", params)
+
+                for product in data.get('rows', []):
+                    product['group_path'] = self._get_product_group_path(product, folders)
+                    products.append(product)
+
+                if len(data.get('rows', [])) < 500:
+                    break
+                offset += len(data['rows'])
+                await asyncio.sleep(1)
+
+            logger.info(f"Загружено товаров: {len(products)}")
+            return products
+        except Exception as e:
+            logger.error(f"Ошибка загрузки товаров: {str(e)}")
+            return []
+
+    async def create_counterparty(self, session: aiohttp.ClientSession, phone: str) -> bool:
+        """Новый метод для создания контрагента"""
+        payload = {
+            "name": phone,
+            "phone": phone,
+            "companyType": "individual",
+            "tags": ["наличный расчет"]
+        }
+
+        try:
+            await self._make_request(
+                session,
+                "entity/counterparty",
+                method="POST",
+                json=payload
+            )
+            return True
+        except Exception as e:
+            logger.error(f"Ошибка создания контрагента: {str(e)}")
+            return False
 
     async def fetch_all_product_folders(self, session: aiohttp.ClientSession) -> Dict[str, Dict]:
         all_folders = {}

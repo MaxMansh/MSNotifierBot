@@ -1,7 +1,7 @@
 import asyncio
 import signal
-import ssl
-from aiogram import Bot
+import sys
+from aiogram import Bot, Dispatcher, types
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 from core.services.api.moysklad import MoyskladAPI
@@ -11,106 +11,147 @@ from core.scheduler import CheckerScheduler
 from utils.cacher import CacheManager
 from config.config import PathManager, Settings
 from utils.logger import AppLogger
+from core.bot.handlers import router as phone_router
 
 
-async def shutdown(scheduler, bot, logger):
-    logger.info("Завершение работы...")
-    await scheduler.stop()
-    await bot.session.close()
-    logger.info("Ресурсы освобождены")
+class BotApplication:
+    def __init__(self):
+        self.scheduler_task = None
+        self.dp = None
+        self.bot = None
+        self.scheduler = None
+        self.logger = None
+        self.config = None
+        self.paths = None
 
+    async def shutdown(self, sig=None):
+        """Корректное завершение работы"""
+        if self.logger:
+            self.logger.info(f"Начало остановки по сигналу {sig.name if sig else 'вручную'}")
 
-async def main():
-    # Инициализация конфигурации
-    config = Settings()
-    paths = PathManager(base_dir="data")
+        tasks = []
+        if self.scheduler_task:
+            self.scheduler_task.cancel()
+            tasks.append(self.scheduler_task)
 
-    # Инициализация логгера
-    app_logger = AppLogger(logs_dir=paths.logs_dir, days_to_keep=config.DAYS_TO_KEEP)
-    global logger
-    logger = app_logger.get_logger("main")
+        if self.dp:
+            tasks.append(self.dp.stop_polling())
 
-    logger.info("Приложение запущено")
+        if tasks:
+            await asyncio.gather(*tasks, return_exceptions=True)
 
-    try:
-        logger.info("Инициализация бота...")
-        # Добавляем таймаут для инициализации бота
-        try:
-            bot = Bot(
-                token=config.BOT_TOKEN,
-                default=DefaultBotProperties(parse_mode=ParseMode.HTML),
-                timeout=30  # 30 секунд таймаут
-            )
-            logger.info("Бот успешно инициализирован")
-        except Exception as e:
-            logger.error(f"Ошибка инициализации бота: {str(e)}")
-            raise
+        if self.bot:
+            await self.bot.session.close()
 
-        logger.debug("Создание SSL контекста...")
-        ssl_context = ssl.create_default_context()
-        ssl_context.check_hostname = False
-        ssl_context.verify_mode = ssl.CERT_NONE
+        if self.logger:
+            self.logger.info("Бот полностью остановлен")
 
-        logger.debug("Инициализация notifier...")
-        notifier = TelegramNotifier(bot, config.CHAT_ID, config.TG_MESSAGE_LIMIT)
+    async def setup(self):
+        """Инициализация компонентов"""
+        # Настройка для Windows
+        if sys.platform == 'win32':
+            asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
-        logger.debug("Инициализация API клиента...")
-        api = MoyskladAPI(config.MS_TOKEN)
+        # Инициализация конфигурации
+        self.config = Settings()
+        self.paths = PathManager(base_dir="data")
 
-        logger.debug("Инициализация кэшей...")
-        stock_cache = CacheManager(paths.stocks_cache, config.CACHE_RESET_DAYS)
-        exp_cache = CacheManager(paths.expiration_cache, config.CACHE_RESET_DAYS)
+        # Инициализация логгера
+        app_logger = AppLogger(
+            logs_dir=self.paths.logs_dir,
+            days_to_keep=self.config.DAYS_TO_KEEP
+        )
+        self.logger = app_logger.get_logger("main")
+        self.logger.info("Инициализация приложения")
 
-        logger.debug("Создание проверяющих...")
+        # Инициализация бота
+        self.bot = Bot(
+            token=self.config.BOT_TOKEN,
+            default=DefaultBotProperties(parse_mode=ParseMode.HTML),
+            timeout=30
+        )
+        self.logger.info("Бот инициализирован")
+
+        # Инициализация API
+        api = MoyskladAPI(self.config.MS_TOKEN)
+        self.logger.info("API клиент создан")
+
+        # Настройка диспетчера
+        self.dp = Dispatcher()
+        self.dp["api"] = api
+        self.dp.include_router(phone_router)
+
+        # Инициализация сервисов
+        notifier = TelegramNotifier(
+            self.bot,
+            self.config.CHAT_ID,
+            self.config.TG_MESSAGE_LIMIT
+        )
+
+        stock_cache = CacheManager(
+            self.paths.stocks_cache,
+            self.config.CACHE_RESET_DAYS
+        )
+        exp_cache = CacheManager(
+            self.paths.expiration_cache,
+            self.config.CACHE_RESET_DAYS
+        )
+
         checkers = [
             StockChecker(notifier, stock_cache),
             ExpirationChecker(notifier, exp_cache, alert_days=7)
         ]
 
-        logger.debug("Создание планировщика...")
-        scheduler = CheckerScheduler(
+        self.scheduler = CheckerScheduler(
             api=api,
             checkers=checkers,
-            check_interval=config.CHECK_INTERVAL_MINUTES,
-            logger=logger
+            check_interval=self.config.CHECK_INTERVAL_MINUTES,
+            logger=self.logger
         )
 
-        # Создаем задачу для обработки завершения работы
-        shutdown_task = None
-
-        def handle_signal():
-            nonlocal shutdown_task
-            if shutdown_task is None:
-                shutdown_task = asyncio.create_task(shutdown(scheduler, bot, logger))
-
-        # Настройка обработчиков сигналов только для Unix-систем
+        # Настройка обработчиков сигналов
         if hasattr(signal, 'SIGINT'):
             try:
                 loop = asyncio.get_running_loop()
                 for sig in (signal.SIGINT, signal.SIGTERM):
-                    loop.add_signal_handler(sig, handle_signal)
+                    loop.add_signal_handler(
+                        sig,
+                        lambda s=sig: asyncio.create_task(self.shutdown(s)))
             except NotImplementedError:
-                # Windows не поддерживает add_signal_handler
-                pass
+                self.logger.warning("Обработчики сигналов не поддерживаются")
 
-        logger.debug("=== ЗАПУСК ОСНОВНОГО ЦИКЛА ===")
+    async def run(self):
+        """Основной цикл работы"""
         try:
-            await scheduler.run()
-        except asyncio.CancelledError:
-            # Обработка отмены задачи (например, при нажатии Ctrl+C)
-            await shutdown(scheduler, bot, logger)
+            await self.setup()
 
-    except Exception as e:
-        logger.error(f"Критическая ошибка: {str(e)}", exc_info=True)
-    finally:
-        if 'bot' in locals():
-            logger.debug("Закрытие сессии бота...")
-            await bot.session.close()
-        logger.info("Работа бота завершена")
+            self.logger.info("Запуск основных задач")
+            self.scheduler_task = asyncio.create_task(self.scheduler.run())
+
+            await self.dp.start_polling(self.bot)
+        except asyncio.CancelledError:
+            self.logger.info("Получен сигнал отмены")
+        except Exception as e:
+            self.logger.critical(f"Критическая ошибка: {str(e)}", exc_info=True)
+        finally:
+            await self.shutdown()
 
 
 if __name__ == "__main__":
+    app = BotApplication()
+
     try:
-        asyncio.run(main())
+        if sys.platform == 'win32':
+            asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
+
+        asyncio.run(app.run())
     except KeyboardInterrupt:
-        pass
+        if app.logger:
+            app.logger.info("Приложение остановлено вручную")
+        else:
+            print("Приложение остановлено вручную")
+    except Exception as e:
+        if app.logger:
+            app.logger.critical(f"Фатальная ошибка: {str(e)}", exc_info=True)
+        else:
+            print(f"Фатальная ошибка до инициализации логгера: {str(e)}")
