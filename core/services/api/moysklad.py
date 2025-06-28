@@ -1,15 +1,15 @@
-from typing import Dict, List, Any
 import aiohttp
 import asyncio
+from datetime import datetime
 from core.services.api.base_api import BaseAPI
-from utils import CacheManager
 from utils.logger import AppLogger
+from typing import Dict, List, Any, AsyncGenerator
 
 logger = AppLogger().get_logger(__name__)
 
 class MoyskladAPI(BaseAPI):
     BASE_URL = "https://api.moysklad.ru/api/remap/1.2"
-    
+    PARALLEL_REQUESTS = 5
 
     def __init__(self, token: str):
         super().__init__(token, self.BASE_URL)
@@ -17,18 +17,72 @@ class MoyskladAPI(BaseAPI):
         self.retry_delay = 5
         logger.debug("Инициализирован клиент API МойСклад")
 
-    async def initialize_counterparties_cache(self, cache_manager: CacheManager) -> bool:
-        """Загружает контрагентов и сохраняет в кэш"""
+    async def initialize_counterparties_cache(self, cache_manager) -> bool:
+        """Оптимизированная загрузка кэша"""
         try:
             async with aiohttp.ClientSession() as session:
-                counterparties = await self.load_counterparties(session)
-                for phone, name in counterparties.items():
-                    cache_manager.add_counterparty(phone, name)
-                logger.info(f"Инициализирован кэш контрагентов: {len(counterparties)} записей")
-                return True
+                total = await self._get_total_count(session)
+                logger.info(f"Всего контрагентов для загрузки: {total}")
+
+                # Параллельная загрузка и обработка
+                batch_size = 5000
+                batch = {}
+                processed = 0
+
+                async for name, data in self._stream_counterparties(session, total):
+                    batch[name] = data['companyType']
+                    processed += 1
+
+                    if processed % 1000 == 0:
+                        logger.info(f"Обработано {processed}/{total} контрагентов")
+
+                    if len(batch) >= batch_size:
+                        cache_manager.add_counterparties_batch(batch)
+                        batch = {}
+
+                if batch:
+                    try:
+                        cache_manager.add_counterparties_batch(batch)
+                    except Exception as e:
+                        logger.error(f"Ошибка добавления последнего пакета: {str(e)}")
+                        return False
+
+            logger.info(f"Загрузка кэша завершена. Всего обработано: {processed} контрагентов")
+            return True
         except Exception as e:
-            logger.error(f"Ошибка инициализации кэша: {str(e)}")
+            logger.error(f"Ошибка загрузки кэша: {str(e)}", exc_info=True)
             return False
+
+    async def _stream_counterparties(self, session: aiohttp.ClientSession, total: int) -> AsyncGenerator:
+        """Потоковая загрузка контрагентов"""
+        limit = 1000
+        offsets = range(0, total, limit)
+
+        semaphore = asyncio.Semaphore(self.PARALLEL_REQUESTS)
+
+        async def fetch_page(offset):
+            async with semaphore:
+                if offset % 10000 == 0:
+                    logger.info(f"Загружено {offset}/{total} контрагентов")
+
+                params = {"limit": limit, "offset": offset, "filter": "archived=false"}
+                data = await self._make_request(session, "entity/counterparty", params)
+                return {
+                    item['name']: {'companyType': item.get('companyType', 'legal')}
+                    for item in data.get('rows', []) if item.get('name')
+                }
+
+        tasks = [fetch_page(offset) for offset in offsets]
+
+        for future in asyncio.as_completed(tasks):
+            page_data = await future
+            for name, data in page_data.items():
+                yield name, data
+
+    async def _get_total_count(self, session: aiohttp.ClientSession) -> int:
+        """Получаем общее количество контрагентов"""
+        data = await self._make_request(session, "entity/counterparty", {"limit": 1})
+        return data['meta']['size']
 
     async def load_counterparties(self, session: aiohttp.ClientSession) -> dict:
         """Загружает всех контрагентов и возвращает словарь {name: companyType}"""
@@ -69,7 +123,10 @@ class MoyskladAPI(BaseAPI):
             "phone": phone,
             "companyType": "individual",
             "tags": ["наличный рассчет"],
-            "legalAddress": "Не указан"
+            "legalAddress": "Не указан",
+            "description": "Автоматически создано ботом\n"
+            f"Дата: {datetime.now().strftime('%d.%m.%Y %H:%M')}\n"
+            "Тип: Физическое лицо"
         }
 
         try:

@@ -1,4 +1,5 @@
 import json
+import orjson
 from pathlib import Path
 from datetime import datetime, timedelta
 from typing import Dict, Any
@@ -15,6 +16,20 @@ class CacheManager:
         self.cache_data = {'counterparties': {}}
         self._load_cache()
         logger.info(f"Инициализирован CacheManager для файла: {self.cache_file}, срок хранения: {max_age_days} дней")
+
+    def add_counterparties_batch(self, batch: Dict[str, str]) -> None:
+        """Пакетное добавление контрагентов в кэш"""
+        try:
+            for name, company_type in batch.items():
+                if name and name not in self.cache_data['counterparties']:
+                    self.cache_data['counterparties'][name] = {
+                        'companyType': company_type
+                    }
+            self._save_cache()
+            logger.debug(f"Добавлено {len(batch)} контрагентов в кэш")
+        except Exception as e:
+            logger.error(f"Ошибка пакетного добавления контрагентов: {str(e)}")
+            raise
 
     def _load_cache(self):
         if self.cache_file.exists():
@@ -45,13 +60,14 @@ class CacheManager:
 
     def _save_cache(self):
         try:
-            with open(self.cache_file, 'w', encoding='utf-8') as f:
-                json.dump({
+            with open(self.cache_file, 'wb') as f:
+                f.write(orjson.dumps({
                     'counterparties': self.cache_data['counterparties'],
                     'last_update': datetime.now().isoformat()
-                }, f, indent=2, ensure_ascii=False)
+                }))
         except Exception as e:
             logger.error(f"Ошибка сохранения кэша: {str(e)}")
+
 
     def load(self) -> Dict[str, Any]:
         try:
