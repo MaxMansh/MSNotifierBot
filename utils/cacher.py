@@ -12,7 +12,7 @@ class CacheManager:
     def __init__(self, cache_file: Path, max_age_days: int):
         self.cache_file = cache_file
         self.max_age = timedelta(days=max_age_days)
-        self.cache_data = {'phones': set(), 'counterparties': {}}  # Измененная структура
+        self.cache_data = {'counterparties': {}}
         self._load_cache()
         logger.info(f"Инициализирован CacheManager для файла: {self.cache_file}, срок хранения: {max_age_days} дней")
 
@@ -21,35 +21,35 @@ class CacheManager:
             try:
                 with open(self.cache_file, 'r', encoding='utf-8') as f:
                     data = json.load(f)
-                    self.cache_data['phones'] = set(data.get('phones', []))
                     self.cache_data['counterparties'] = data.get('counterparties', {})
             except Exception as e:
                 logger.error(f"Ошибка загрузки кэша: {str(e)}")
 
-    def add_counterparty(self, phone: str, name: str) -> bool:
-        """Добавляет контрагента в кэш. Возвращает True если был добавлен новый."""
-        if phone not in self.cache_data['counterparties']:
-            self.cache_data['counterparties'][phone] = name
+    def add_counterparty(self, name: str, company_type: str) -> bool:
+        """Добавляет контрагента в кэш с типом компании"""
+        if name and name not in self.cache_data['counterparties']:
+            self.cache_data['counterparties'][name] = {
+                'companyType': company_type
+            }
             self._save_cache()
             return True
         return False
 
-    def has_counterparty(self, phone: str) -> bool:
-        """Проверяет наличие контрагента по номеру телефона."""
-        return phone in self.cache_data['counterparties']
+    def has_counterparty(self, name: str) -> bool:
+        """Проверяет наличие контрагента по имени"""
+        return name in self.cache_data['counterparties']
 
-    def load_counterparties(self) -> dict:
-        """Возвращает словарь всех контрагентов {phone: name}."""
-        return self.cache_data.get('counterparties', {})
+    def get_counterparty_type(self, name: str) -> str:
+        """Возвращает тип компании контрагента"""
+        return self.cache_data['counterparties'].get(name, {}).get('companyType', '')
 
     def _save_cache(self):
         try:
             with open(self.cache_file, 'w', encoding='utf-8') as f:
                 json.dump({
-                    'phones': list(self.cache_data['phones']),
                     'counterparties': self.cache_data['counterparties'],
                     'last_update': datetime.now().isoformat()
-                }, f, indent=2)
+                }, f, indent=2, ensure_ascii=False)
         except Exception as e:
             logger.error(f"Ошибка сохранения кэша: {str(e)}")
 

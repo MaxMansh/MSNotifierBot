@@ -113,6 +113,8 @@ class BotApplication:
             self.config.CACHE_RESET_DAYS
         )
 
+        self.phone_cache._save_cache()
+
         # Загрузка контрагентов через API
         if not await api.initialize_counterparties_cache(self.phone_cache):
             self.logger.warning("Не удалось загрузить контрагентов при старте")

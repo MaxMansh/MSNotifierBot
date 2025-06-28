@@ -9,6 +9,7 @@ logger = AppLogger().get_logger(__name__)
 
 class MoyskladAPI(BaseAPI):
     BASE_URL = "https://api.moysklad.ru/api/remap/1.2"
+    
 
     def __init__(self, token: str):
         super().__init__(token, self.BASE_URL)
@@ -30,19 +31,28 @@ class MoyskladAPI(BaseAPI):
             return False
 
     async def load_counterparties(self, session: aiohttp.ClientSession) -> dict:
-        """Загружает всех контрагентов и возвращает словарь {phone: name}"""
+        """Загружает всех контрагентов и возвращает словарь {name: companyType}"""
         counterparties = {}
         offset = 0
+
+        logger.info("Начало загрузки списка контрагентов через API.")
 
         while True:
             params = {"limit": 500, "offset": offset}
             try:
                 data = await self._make_request(session, "entity/counterparty", params)
+                loaded_count = len(data.get('rows', []))
+                logger.debug(f"Загружено контрагентов в текущей порции: {loaded_count}")
+
                 for item in data.get('rows', []):
-                    if phone := item.get('phone'):
-                        counterparties[phone] = item.get('name', phone)
+                    name = item.get('name', '')
+                    if name:  # Используем name как ключ
+                        counterparties[name] = {
+                            'companyType': item.get('companyType', 'legal')
+                        }
 
                 if len(data.get('rows', [])) < 500:
+                    logger.info(f"Загрузка контрагентов завершена. Всего загружено: {len(counterparties)}")
                     break
                 offset += len(data['rows'])
                 await asyncio.sleep(1)
@@ -51,6 +61,29 @@ class MoyskladAPI(BaseAPI):
                 break
 
         return counterparties
+
+    async def create_counterparty(self, session: aiohttp.ClientSession, phone: str) -> bool:
+        """Создает контрагента как физическое лицо с тегом"""
+        payload = {
+            "name": phone,
+            "phone": phone,
+            "companyType": "individual",
+            "tags": ["наличный рассчет"],
+            "legalAddress": "Не указан"
+        }
+
+        try:
+            await self._make_request(
+                session,
+                "entity/counterparty",
+                method="POST",
+                json=payload
+            )
+            logger.info(f"Создан контрагент: {phone}")
+            return True
+        except Exception as e:
+            logger.error(f"Ошибка создания контрагента: {str(e)}")
+            return False
 
     async def fetch_all_products(self, session: aiohttp.ClientSession) -> List[Dict[str, Any]]:
         """Основной метод для получения товаров (оставлен без изменений)"""
@@ -78,27 +111,6 @@ class MoyskladAPI(BaseAPI):
         except Exception as e:
             logger.error(f"Ошибка загрузки товаров: {str(e)}")
             return []
-
-    async def create_counterparty(self, session: aiohttp.ClientSession, phone: str) -> bool:
-        """Новый метод для создания контрагента"""
-        payload = {
-            "name": phone,
-            "phone": phone,
-            "companyType": "individual",
-            "tags": ["наличный расчет"]
-        }
-
-        try:
-            await self._make_request(
-                session,
-                "entity/counterparty",
-                method="POST",
-                json=payload
-            )
-            return True
-        except Exception as e:
-            logger.error(f"Ошибка создания контрагента: {str(e)}")
-            return False
 
     async def fetch_all_product_folders(self, session: aiohttp.ClientSession) -> Dict[str, Dict]:
         all_folders = {}
