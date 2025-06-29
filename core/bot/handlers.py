@@ -103,10 +103,11 @@ async def process_batch(session: aiohttp.ClientSession,
 @router.message(Command("start"))
 async def handle_start(message: Message):
     """Обработка команды /start"""
+    logger.info(f"Пользователь {message.from_user.id} начал взаимодействие с ботом.")
+    logger.info("Отправлено приветственное сообщение.")
     welcome_text = (
-        "👋 Добро пожаловать в <b>МойСклад Бот</b>!\n\n"
-        "Я помогаю быстро добавлять контрагентов по номеру телефона.\n"
-        "Выберите действие:"
+        "👋 Добро пожаловать в <b>Многофункциональный бот для МойСклад</b>!\n\n"
+        "Отправьте номер телефона в любом формате."
     )
     await message.answer(welcome_text, parse_mode="HTML", reply_markup=get_main_keyboard())
 
@@ -115,6 +116,8 @@ async def handle_start(message: Message):
 @router.message(F.text.lower() == "ℹ️ помощь")
 async def handle_help(message: Message):
     """Показывает справку"""
+    logger.info(f"Пользователь {message.from_user.id} запросил справку.")
+    logger.info("Отправлено сообщение с инструкциями.")
     help_text = (
         "📚 <b>Справка по боту</b>\n\n"
         "• Отправьте номер телефона или Excel-файл\n"
@@ -132,25 +135,31 @@ async def handle_help(message: Message):
 @router.message(F.text.lower() == "🔄 статус")
 async def check_status(message: Message, api: MoyskladAPI):
     """Проверяет соединение с API"""
+    logger.info(f"Пользователь {message.from_user.id} запросил статус API.")
     try:
         async with aiohttp.ClientSession() as session:
             if await api.check_connection(session):
+                logger.info("API МойСклад доступен.")
                 await message.answer("🟢 API МойСклад доступен", reply_markup=get_main_keyboard())
             else:
+                logger.error("Ошибка подключения к API МойСклад.")
                 await message.answer("🔴 Ошибка подключения к API", reply_markup=get_main_keyboard())
-    except Exception:
+    except Exception as e:
+        logger.error(f"Ошибка при проверке статуса API: {e}")
         await message.answer("⚠️ Ошибка проверки статуса", reply_markup=get_main_keyboard())
 
 
 @router.message(F.text.lower() == "📱 добавить номер")
 async def handle_add_number(message: Message):
     """Запрос номера телефона"""
+    logger.info(f"Пользователь {message.from_user.id} запросил добавление номера.")
     await message.answer("Отправьте номер телефона в любом формате:", reply_markup=get_back_keyboard())
 
 
 @router.message(F.text.lower() == "📊 загрузить файл")
 async def handle_upload_file(message: Message):
     """Запрос Excel-файла"""
+    logger.info(f"Пользователь {message.from_user.id} запросил загрузку файла.")
     await message.answer(
         "Пришлите Excel-файл с номерами в колонке 'Наименование':",
         reply_markup=get_back_keyboard()
@@ -160,17 +169,23 @@ async def handle_upload_file(message: Message):
 @router.message(F.text.lower() == "🔙 назад")
 async def handle_back(message: Message):
     """Возврат в главное меню"""
+    logger.info(f"Пользователь {message.from_user.id} вернулся в главное меню.")
     await handle_start(message)
 
 
 @router.message(F.text)
 async def handle_text(message: Message, api: MoyskladAPI, phone_cache: CacheManager, config: Settings):
     """Обработка текста с номером телефона"""
+    logger.info(f"Пользователь {message.from_user.id} отправил текстовое сообщение: {message.text}")
     if not (phone := extract_phone(message.text)):
+        logger.warning(f"Не удалось распознать номер в сообщении: {message.text}")
         await message.answer("🔍 Не удалось распознать номер", reply_markup=get_main_keyboard())
         return
 
+    logger.info(f"Извлечен номер телефона: {phone}")
+
     if phone_cache.has_counterparty(phone):
+        logger.info(f"Номер {phone} уже существует в системе.")
         await message.answer(f"ℹ️ Номер {phone} уже в системе", reply_markup=get_main_keyboard())
         return
 
@@ -178,25 +193,30 @@ async def handle_text(message: Message, api: MoyskladAPI, phone_cache: CacheMana
         try:
             async with aiohttp.ClientSession() as session:
                 if await api.create_counterparty(session, phone):
+                    logger.info(f"Номер {phone} успешно добавлен в систему.")
                     phone_cache.add_counterparty(phone, "individual")
                     await message.answer(f"✅ Номер {phone} добавлен!", reply_markup=get_main_keyboard())
                     return
         except Exception as e:
-            logger.error(f"Ошибка ({attempt}): {str(e)}")
+            logger.error(f"Ошибка при добавлении номера {phone} (попытка {attempt}): {e}")
             if attempt < config.MAX_ATTEMPTS:
                 await asyncio.sleep(config.RETRY_DELAY * attempt)
 
+    logger.error(f"Не удалось добавить номер {phone} после {config.MAX_ATTEMPTS} попыток.")
     await message.answer(f"❌ Не удалось добавить номер {phone}", reply_markup=get_main_keyboard())
 
 
 @router.message(F.document)
 async def handle_document(message: Message, api: MoyskladAPI, phone_cache: CacheManager, config: Settings):
     """Обработка Excel-файла"""
+    logger.info(f"Пользователь {message.from_user.id} отправил файл: {message.document.file_name}")
     if not message.document.file_name.endswith(('.xlsx', '.xls')):
+        logger.warning(f"Неподдерживаемый формат файла: {message.document.file_name}")
         await message.answer("❌ Нужен файл Excel (.xlsx)", reply_markup=get_main_keyboard())
         return
 
     if message.document.file_size > MAX_FILE_SIZE:
+        logger.warning(f"Файл слишком большой: {message.document.file_size} байт.")
         await message.answer("❌ Файл слишком большой (макс. 10МБ)", reply_markup=get_main_keyboard())
         return
 
@@ -205,10 +225,12 @@ async def handle_document(message: Message, api: MoyskladAPI, phone_cache: Cache
         phones = await process_excel(file)
 
         if not phones:
+            logger.warning("Номера не найдены в файле.")
             await message.answer("🔍 Номера не найдены", reply_markup=get_main_keyboard())
             return
 
         total = len(phones)
+        logger.info(f"Из файла извлечено {total} номеров.")
         msg = await message.answer(f"🔍 Найдено {total} номеров. Обработка...", reply_markup=get_back_keyboard())
 
         success, skipped, failed = 0, 0, []
@@ -221,6 +243,7 @@ async def handle_document(message: Message, api: MoyskladAPI, phone_cache: Cache
                 failed.extend(f)
 
                 if i % 100 == 0:
+                    logger.info(f"Обработано {i + len(batch)}/{total} номеров.")
                     await msg.edit_text(f"⏳ Обработано {i + len(batch)}/{total}...")
 
         result = (
@@ -229,8 +252,9 @@ async def handle_document(message: Message, api: MoyskladAPI, phone_cache: Cache
             f"• Дубликатов: {skipped}\n"
             f"• Ошибок: {len(failed)}"
         )
+        logger.info(f"Итоги обработки файла: {result}")
         await message.answer(result, reply_markup=get_main_keyboard())
 
     except Exception as e:
-        logger.error(f"Ошибка обработки файла: {str(e)}")
+        logger.error(f"Ошибка обработки файла: {e}")
         await message.answer("❌ Ошибка обработки файла", reply_markup=get_main_keyboard())
