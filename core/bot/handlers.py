@@ -100,10 +100,23 @@ async def process_batch(session: aiohttp.ClientSession,
     return success, skipped, errors
 
 
+def get_user_info(user):
+    """Формирует строку с именем пользователя и username (если есть)"""
+    if not user.first_name and not user.last_name and not user.username:
+        return f"Анонимный пользователь (ID: {user.id})"
+    name = user.first_name or ""
+    if user.last_name:
+        name += f" {user.last_name}"
+    if user.username:
+        name += f" (@{user.username})"
+    return name.strip()
+
+
 @router.message(Command("start"))
 async def handle_start(message: Message):
     """Обработка команды /start"""
-    logger.info(f"Пользователь {message.from_user.id} начал взаимодействие с ботом.")
+    user_info = get_user_info(message.from_user)
+    logger.info(f"Пользователь {user_info} начал взаимодействие с ботом.")
     logger.info("Отправлено приветственное сообщение.")
     welcome_text = (
         "👋 Добро пожаловать в <b>Многофункциональный бот для МойСклад</b>!\n\n"
@@ -116,7 +129,8 @@ async def handle_start(message: Message):
 @router.message(F.text.lower() == "ℹ️ помощь")
 async def handle_help(message: Message):
     """Показывает справку"""
-    logger.info(f"Пользователь {message.from_user.id} запросил справку.")
+    user_info = get_user_info(message.from_user)
+    logger.info(f"Пользователь {user_info} запросил справку.")
     logger.info("Отправлено сообщение с инструкциями.")
     help_text = (
         "📚 <b>Справка по боту</b>\n\n"
@@ -135,7 +149,8 @@ async def handle_help(message: Message):
 @router.message(F.text.lower() == "🔄 статус")
 async def check_status(message: Message, api: MoyskladAPI):
     """Проверяет соединение с API"""
-    logger.info(f"Пользователь {message.from_user.id} запросил статус API.")
+    user_info = get_user_info(message.from_user)
+    logger.info(f"Пользователь {user_info} запросил статус API.")
     try:
         async with aiohttp.ClientSession() as session:
             if await api.check_connection(session):
@@ -152,14 +167,16 @@ async def check_status(message: Message, api: MoyskladAPI):
 @router.message(F.text.lower() == "📱 добавить номер")
 async def handle_add_number(message: Message):
     """Запрос номера телефона"""
-    logger.info(f"Пользователь {message.from_user.id} запросил добавление номера.")
+    user_info = get_user_info(message.from_user)
+    logger.info(f"Пользователь {user_info} запросил добавление номера.")
     await message.answer("Отправьте номер телефона в любом формате:", reply_markup=get_back_keyboard())
 
 
 @router.message(F.text.lower() == "📊 загрузить файл")
 async def handle_upload_file(message: Message):
     """Запрос Excel-файла"""
-    logger.info(f"Пользователь {message.from_user.id} запросил загрузку файла.")
+    user_info = get_user_info(message.from_user)
+    logger.info(f"Пользователь {user_info} запросил загрузку файла.")
     await message.answer(
         "Пришлите Excel-файл с номерами в колонке 'Наименование':",
         reply_markup=get_back_keyboard()
@@ -169,14 +186,16 @@ async def handle_upload_file(message: Message):
 @router.message(F.text.lower() == "🔙 назад")
 async def handle_back(message: Message):
     """Возврат в главное меню"""
-    logger.info(f"Пользователь {message.from_user.id} вернулся в главное меню.")
+    user_info = get_user_info(message.from_user)
+    logger.info(f"Пользователь {user_info} вернулся в главное меню.")
     await handle_start(message)
 
 
 @router.message(F.text)
 async def handle_text(message: Message, api: MoyskladAPI, phone_cache: CacheManager, config: Settings):
     """Обработка текста с номером телефона"""
-    logger.info(f"Пользователь {message.from_user.id} отправил текстовое сообщение: {message.text}")
+    user_info = get_user_info(message.from_user)
+    logger.info(f"Пользователь {user_info} отправил текстовое сообщение: {message.text}")
     if not (phone := extract_phone(message.text)):
         logger.warning(f"Не удалось распознать номер в сообщении: {message.text}")
         await message.answer("🔍 Не удалось распознать номер", reply_markup=get_main_keyboard())
@@ -209,7 +228,8 @@ async def handle_text(message: Message, api: MoyskladAPI, phone_cache: CacheMana
 @router.message(F.document)
 async def handle_document(message: Message, api: MoyskladAPI, phone_cache: CacheManager, config: Settings):
     """Обработка Excel-файла"""
-    logger.info(f"Пользователь {message.from_user.id} отправил файл: {message.document.file_name}")
+    user_info = get_user_info(message.from_user)
+    logger.info(f"Пользователь {user_info} отправил файл: {message.document.file_name}")
     if not message.document.file_name.endswith(('.xlsx', '.xls')):
         logger.warning(f"Неподдерживаемый формат файла: {message.document.file_name}")
         await message.answer("❌ Нужен файл Excel (.xlsx)", reply_markup=get_main_keyboard())
@@ -242,9 +262,15 @@ async def handle_document(message: Message, api: MoyskladAPI, phone_cache: Cache
                 skipped += sk
                 failed.extend(f)
 
-                if i % 100 == 0:
-                    logger.info(f"Обработано {i + len(batch)}/{total} номеров.")
-                    await msg.edit_text(f"⏳ Обработано {i + len(batch)}/{total}...")
+                # Обновляем статус только после обработки каждого пакета
+                current_processed = i + len(batch)
+                if current_processed % BATCH_SIZE == 0 or current_processed == total:
+                    try:
+                        await msg.edit_text(f"⏳ Обработано {current_processed}/{total}...")
+                    except Exception as e:
+                        logger.warning(f"Не удалось отредактировать сообщение: {e}")
+                        # Если не удалось отредактировать, отправляем новое сообщение
+                        msg = await message.answer(f"⏳ Обработано {current_processed}/{total}...")
 
         result = (
             f"📊 Итоги:\n"
