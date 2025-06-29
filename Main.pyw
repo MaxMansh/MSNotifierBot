@@ -121,6 +121,7 @@ class BotApplication:
         self.dp = Dispatcher()
         self.dp["api"] = api
         self.dp["phone_cache"] = self.phone_cache
+        self.dp["config"] = self.config
         self.dp.include_router(phone_router)
 
         # Настройка обработчиков сигналов

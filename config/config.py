@@ -11,6 +11,8 @@ class Settings(BaseSettings):
     CACHE_RESET_DAYS: int = 30
     API_REQUEST_LIMIT: int = 500
     API_REQUEST_DELAY: int = 5
+    MAX_ATTEMPTS: int = 5       # Максимальное количество попыток
+    RETRY_DELAY: int = 60       # Базовая задержка между попытками (сек)
 
     class Config:
         env_file = ".env"

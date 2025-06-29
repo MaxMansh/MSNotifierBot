@@ -17,6 +17,16 @@ class MoyskladAPI(BaseAPI):
         self.retry_delay = 5
         logger.debug("Инициализирован клиент API МойСклад")
 
+    async def check_connection(self, session: aiohttp.ClientSession) -> bool:
+        """Проверяет соединение с API МойСклад"""
+        try:
+            # Используем небольшой запрос для проверки соединения
+            await self._make_request(session, "entity/counterparty", {"limit": 1})
+            return True
+        except Exception as e:
+            logger.error(f"Ошибка проверки соединения: {str(e)}")
+            return False
+
     async def initialize_counterparties_cache(self, cache_manager) -> bool:
         """Оптимизированная загрузка кэша"""
         try:
@@ -125,22 +135,35 @@ class MoyskladAPI(BaseAPI):
             "tags": ["наличный рассчет"],
             "legalAddress": "Не указан",
             "description": "Автоматически создано ботом\n"
-            f"Дата: {datetime.now().strftime('%d.%m.%Y %H:%M')}\n"
-            "Тип: Физическое лицо"
+                           f"Дата: {datetime.now().strftime('%d.%m.%Y %H:%M')}\n"
+                           "Тип: Физическое лицо"
         }
 
         try:
-            await self._make_request(
+            response = await self._make_request(
                 session,
                 "entity/counterparty",
                 method="POST",
                 json=payload
             )
-            logger.info(f"Создан контрагент: {phone}")
-            return True
+
+            # Проверяем, что ответ содержит ID созданного контрагента
+            if response.get('id'):
+                logger.info(f"Создан контрагент: {phone}")
+                return True
+
+            logger.warning(f"Неожиданный ответ API при создании контрагента: {response}")
+            return False
+
+        except aiohttp.ClientResponseError as e:
+            if e.status == 409:  # Конфликт - контрагент уже существует
+                logger.info(f"Контрагент {phone} уже существует (получено из API)")
+                return True
+            logger.error(f"Ошибка HTTP {e.status} при создании контрагента: {e.message}")
+            return False
         except Exception as e:
             logger.error(f"Ошибка создания контрагента: {str(e)}")
-            return False
+            raise  # Пробрасываем исключение для обработки повторных попыток
 
     async def fetch_all_products(self, session: aiohttp.ClientSession) -> List[Dict[str, Any]]:
         """Основной метод для получения товаров (оставлен без изменений)"""
