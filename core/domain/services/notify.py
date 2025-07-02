@@ -3,8 +3,8 @@ from aiogram import Bot, html
 from aiogram.enums import ParseMode
 from typing import List
 from datetime import datetime
-from utils.logger import AppLogger
-from core.entities.product import Product
+from core.infrastructure import AppLogger
+from core.domain.entities import Product
 
 logger = AppLogger().get_logger(__name__)
 

@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from typing import List
-from core.entities.product import Product
+from core.domain.entities import Product
 import aiohttp
 import ssl
 

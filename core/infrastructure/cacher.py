@@ -3,7 +3,7 @@ import orjson
 from pathlib import Path
 from datetime import datetime, timedelta
 from typing import Dict, Any
-from utils.logger import AppLogger
+from core.infrastructure.logger import AppLogger
 
 logger = AppLogger().get_logger(__name__)
 

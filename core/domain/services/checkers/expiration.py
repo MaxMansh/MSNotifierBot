@@ -1,10 +1,10 @@
 from datetime import datetime
 from typing import List, Dict, Optional
 from collections import defaultdict
-from core.entities.product import Product
-from core.services.checkers.base import BaseChecker
-from core.notification import ExpirationAlert
-from utils.logger import AppLogger
+from core.domain.entities import Product
+from core.domain.services.checkers.base import BaseChecker
+from core.domain.services.notify import ExpirationAlert
+from core.infrastructure import AppLogger
 
 logger = AppLogger().get_logger(__name__)
 

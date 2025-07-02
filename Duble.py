@@ -3,8 +3,8 @@ from collections import defaultdict
 import logging
 from typing import Dict, List
 import aiohttp
-from config import Settings, PathManager
-from core.services.api.moysklad import MoyskladAPI
+from core.config.settings import Settings, PathManager
+from core.api.moysklad import MoyskladAPI
 
 # Настройка логгирования
 log_manager = PathManager()

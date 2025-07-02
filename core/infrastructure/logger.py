@@ -1,7 +1,7 @@
 import logging
 from logging.handlers import TimedRotatingFileHandler
 from pathlib import Path
-from config.config import Settings
+from core.config import Settings
 
 class AppLogger:
     _instance = None

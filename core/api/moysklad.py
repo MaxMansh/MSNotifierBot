@@ -1,8 +1,8 @@
 import aiohttp
 import asyncio
 from datetime import datetime
-from core.services.api.base_api import BaseAPI
-from utils.logger import AppLogger
+from core.api.base_api import BaseAPI
+from core.infrastructure import AppLogger
 from typing import Dict, List, Any, AsyncGenerator
 
 logger = AppLogger().get_logger(__name__)

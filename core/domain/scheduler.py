@@ -1,11 +1,11 @@
 import asyncio
 import aiohttp
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import List, Optional
-from core.entities.product import Product
-from core.services.api.base_api import BaseAPI
+from core.domain.entities import Product
+from core.api.base_api import BaseAPI
 import ssl
-from utils.logger import AppLogger
+from core.infrastructure import AppLogger
 
 logger = AppLogger().get_logger(__name__)
 
@@ -110,6 +110,6 @@ class CheckerScheduler:
     def _parse_expiration(self, product_data: dict) -> Optional[datetime]:
         for attr in product_data.get('attributes', []):
             if attr.get('name') == 'Срок годности' and attr.get('value'):
-                from utils.date_parser import DateParser
+                from core.infrastructure.date_parser import DateParser
                 return DateParser.parse(attr['value'])
         return None

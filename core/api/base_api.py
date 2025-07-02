@@ -1,9 +1,8 @@
 import ssl
-import asyncio
 from abc import ABC, abstractmethod
 import aiohttp
 from typing import Dict, List, Any
-from utils.logger import AppLogger
+from core.infrastructure import AppLogger
 
 logger = AppLogger().get_logger(__name__)
 

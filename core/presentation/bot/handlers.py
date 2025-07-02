@@ -5,10 +5,10 @@ import re
 from aiogram import Router, F
 from aiogram.types import Message, ReplyKeyboardMarkup, KeyboardButton
 from aiogram.filters import Command
-from core.services.api.moysklad import MoyskladAPI
-from utils.cacher import CacheManager
-from config.config import Settings
-from utils.logger import AppLogger
+from core.api.moysklad import MoyskladAPI
+from core.infrastructure import CacheManager
+from core.config import Settings
+from core.infrastructure import AppLogger
 from io import BytesIO
 from typing import List, Optional, Tuple
 

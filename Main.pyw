@@ -4,14 +4,14 @@ import sys
 from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
-from core.services.api.moysklad import MoyskladAPI
-from core.services.checkers import StockChecker, ExpirationChecker
-from core.notification import TelegramNotifier
-from core.scheduler import CheckerScheduler
-from utils.cacher import CacheManager
-from config.config import PathManager, Settings
-from utils.logger import AppLogger
-from core.bot.handlers import router as phone_router
+from core.api.moysklad import MoyskladAPI
+from core.domain.services.checkers import StockChecker, ExpirationChecker
+from core.domain.services.notify import TelegramNotifier
+from core.domain.scheduler import CheckerScheduler
+from core.infrastructure import CacheManager
+from core.config import PathManager, Settings
+from core.infrastructure import AppLogger
+from core.presentation.bot.handlers import router as phone_router
 
 
 class BotApplication:
