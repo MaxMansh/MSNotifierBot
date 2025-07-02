@@ -1,3 +1,5 @@
+from typing import List
+
 from pydantic_settings import BaseSettings
 from pathlib import Path
 
@@ -5,6 +7,7 @@ class Settings(BaseSettings):
     BOT_TOKEN: str
     MS_TOKEN: str
     CHAT_ID: str
+    ALLOWED_USER_IDS: List[int] = []
     CHECK_INTERVAL_MINUTES: int = 720
     TG_MESSAGE_LIMIT: int = 4096
     DAYS_TO_KEEP: int = 30

@@ -13,7 +13,6 @@ from core.config import PathManager, Settings
 from core.infrastructure import AppLogger
 from core.presentation.bot.handlers import router as phone_router
 
-
 class BotApplication:
     def __init__(self):
         self.scheduler_task = None
@@ -150,7 +149,6 @@ class BotApplication:
             self.logger.critical(f"Критическая ошибка: {str(e)}", exc_info=True)
         finally:
             await self.shutdown()
-
 
 if __name__ == "__main__":
     app = BotApplication()
