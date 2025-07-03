@@ -13,7 +13,15 @@ from core.config import Settings
 from core.infrastructure import AppLogger
 from io import BytesIO
 from typing import List, Optional, Tuple
-from .admin_panel import router as admin_router, get_admin_keyboard
+from .admin_panel import router as admin_router, get_admin_keyboard, AccessControlStates, CacheControlStates
+
+def is_admin_state(state: str) -> bool:
+    """Проверяет, относится ли состояние к админ-панели"""
+    admin_states = {
+        AccessControlStates.VIEW_LOG_FILE,
+        CacheControlStates.CHOOSE_ACTION
+    }
+    return state in admin_states
 
 router = Router()
 router.include_router(admin_router)
@@ -39,7 +47,7 @@ async def check_access_middleware(handler, event: types.Message, data: dict):
 
     user_id = event.from_user.id
     if user_id not in config.ALLOWED_USER_IDS:
-        AppLogger().log_user_activity(event.from_user, "Попытка неавторизованного доступа")
+        AppLogger().log_user_activity_info(event.from_user, "Попытка неавторизованного доступа")
         await event.answer("🚫 Доступ запрещен.")
         return
 
@@ -140,7 +148,7 @@ async def process_batch(session: aiohttp.ClientSession,
 @router.message(Command("start"))
 async def handle_start(message: Message):
     """Обработка команды /start."""
-    AppLogger().log_user_activity(message.from_user, "Начал взаимодействие с ботом", "Команда /start")
+    AppLogger().log_user_activity_info(message.from_user, "Начал взаимодействие с ботом", "Команда /start")
     welcome_text = (
         "👋 Добро пожаловать в <b>Многофункциональный бот для МойСклад</b>!\n\n"
         "Вы можете:\n"
@@ -155,14 +163,14 @@ async def handle_start(message: Message):
 @router.message(F.text == "🔐 Админ-панель")
 async def handle_admin_panel(message: Message, config: Settings):
     """Обработка входа в админ-панель."""
-    AppLogger().log_user_activity(message.from_user, "Попытка входа в админ-панель")
+    AppLogger().log_user_activity_debug(message.from_user, "Попытка входа в админ-панель")
 
     if message.from_user.id not in config.ADMIN_USER_IDS:
-        AppLogger().log_user_activity(message.from_user, "Отказано в доступе к админ-панели")
+        AppLogger().log_user_activity_warning(message.from_user, "Отказано в доступе к админ-панели")
         await message.answer("🚫 У вас нет доступа к админ-панели.")
         return
 
-    AppLogger().log_user_activity(message.from_user, "Успешный вход в админ-панель")
+    AppLogger().log_user_activity_info(message.from_user, "Успешный вход в админ-панель")
     await message.answer("🔐 Админ-панель", reply_markup=get_admin_keyboard())
 
 
@@ -170,7 +178,7 @@ async def handle_admin_panel(message: Message, config: Settings):
 @router.message(F.text == "ℹ️ Помощь")
 async def handle_help(message: Message):
     """Показывает справку."""
-    AppLogger().log_user_activity(message.from_user, "Запросил справку")
+    AppLogger().log_user_activity_info(message.from_user, "Запросил справку")
     help_text = (
         "📚 <b>Справка по боту</b>\n\n"
         "Основные функции:\n"
@@ -188,30 +196,46 @@ async def handle_help(message: Message):
 @router.message(F.text == "🔄 Статус")
 async def check_status(message: Message, api: MoyskladAPI):
     """Проверяет соединение с API."""
-    AppLogger().log_user_activity(message.from_user, "Проверка статуса API")
+    AppLogger().log_user_activity_debug(message.from_user, "Проверка статуса API")
     try:
         async with aiohttp.ClientSession() as session:
             if await api.check_connection(session):
-                AppLogger().log_user_activity(message.from_user, "Проверка API", "API доступен")
+                AppLogger().log_user_activity_info(message.from_user, "Проверка API", "API доступен")
                 await message.answer("🟢 API МойСклад доступен", reply_markup=get_main_keyboard())
             else:
-                AppLogger().log_user_activity(message.from_user, "Проверка API", "Ошибка подключения")
+                AppLogger().log_user_activity_warning(message.from_user, "Проверка API", "Ошибка подключения")
                 await message.answer("🔴 Ошибка подключения к API", reply_markup=get_main_keyboard())
     except Exception as e:
-        AppLogger().log_user_activity(message.from_user, "Ошибка проверки API", f"Ошибка: {str(e)}")
+        AppLogger().log_user_activity_error(message.from_user, "Ошибка проверки API", f"Ошибка: {str(e)}")
         await message.answer("⚠️ Ошибка проверки статуса", reply_markup=get_main_keyboard())
 
 
 @router.message(F.text == "🔙 Назад")
 async def handle_back(message: Message, state: FSMContext):
-    """Возврат в главное меню."""
+    """Универсальный обработчик кнопки Назад"""
     current_state = await state.get_state()
+
+    # Если состояние не определено - возврат в главное меню
+    if current_state is None:
+        AppLogger().log_user_activity_debug(message.from_user, "Возврат в главное меню (без состояния)")
+        await handle_start(message)
+        return
+
+    # Режим создания контрагента
     if current_state == CounterpartyCreationStates.ACTIVE:
         await state.clear()
-        AppLogger().log_user_activity(message.from_user, "Выход из режима создания контрагента")
+        AppLogger().log_user_activity_info(message.from_user, "Выход из режима создания контрагента")
         await message.answer("❌ Режим создания контрагента отменен.", reply_markup=get_main_keyboard())
+
+    # Состояния админ-панели - возвращаем в админ-панель
+    elif is_admin_state(current_state):
+        await state.clear()
+        AppLogger().log_user_activity_info(message.from_user, "Возврат в админ-панель")
+        await message.answer("🔐 Админ-панель", reply_markup=get_admin_keyboard())
+
+    # Все остальные случаи
     else:
-        AppLogger().log_user_activity(message.from_user, "Возврат в главное меню")
+        AppLogger().log_user_activity_debug(message.from_user, "Возврат в главное меню")
         await handle_start(message)
 
 
@@ -219,7 +243,7 @@ async def handle_back(message: Message, state: FSMContext):
 async def handle_counterparty_creation_start(message: Message, state: FSMContext):
     """Активация режима создания контрагента."""
     await state.set_state(CounterpartyCreationStates.ACTIVE)
-    AppLogger().log_user_activity(message.from_user, "Активация режима создания контрагента")
+    AppLogger().log_user_activity_debug(message.from_user, "Активация режима создания контрагента")
     await message.answer(
         "📝 <b>Режим создания контрагента активирован</b>\n\n"
         "Теперь вы можете:\n"
@@ -234,18 +258,18 @@ async def handle_counterparty_creation_start(message: Message, state: FSMContext
 @router.message(F.text, CounterpartyCreationStates.ACTIVE)
 async def handle_phone_number(message: Message, api: MoyskladAPI, phone_cache: CacheManager, config: Settings):
     """Обработка номеров телефонов в режиме создания контрагента."""
-    AppLogger().log_user_activity(message.from_user, "Отправил текстовое сообщение", f"Текст: {message.text}")
+    AppLogger().log_user_activity_info(message.from_user, "Отправил текстовое сообщение", f"Текст: {message.text}")
 
     if not (phone := extract_phone(message.text)):
-        AppLogger().log_user_activity(message.from_user, "Не удалось распознать номер", f"В сообщении: {message.text}")
+        AppLogger().log_user_activity_debug(message.from_user, "Не удалось распознать номер", f"В сообщении: {message.text}")
         await message.answer("🔍 Не удалось распознать номер. Отправьте номер телефона в любом формате.",
                            reply_markup=get_counterparty_mode_keyboard())
         return
 
-    AppLogger().log_user_activity(message.from_user, "Попытка добавить номер", f"Номер: {phone}")
+    AppLogger().log_user_activity_debug(message.from_user, "Попытка добавить номер", f"Номер: {phone}")
 
     if phone_cache.has_counterparty(phone):
-        AppLogger().log_user_activity(message.from_user, "Номер уже существует", f"Номер: {phone}")
+        AppLogger().log_user_activity_debug(message.from_user, "Номер уже существует", f"Номер: {phone}")
         await message.answer(f"ℹ️ Номер {phone} уже в системе",
                            reply_markup=get_counterparty_mode_keyboard())
         return
@@ -254,7 +278,7 @@ async def handle_phone_number(message: Message, api: MoyskladAPI, phone_cache: C
         try:
             async with aiohttp.ClientSession() as session:
                 if await api.create_counterparty(session, phone):
-                    AppLogger().log_user_activity(message.from_user, "Успешно добавил номер", f"Номер: {phone}")
+                    AppLogger().log_user_activity_info(message.from_user, "Успешно добавил номер", f"Номер: {phone}")
                     phone_cache.add_counterparty(phone, "individual")
                     await message.answer(
                         f"✅ Номер {phone} успешно добавлен!",
@@ -262,7 +286,7 @@ async def handle_phone_number(message: Message, api: MoyskladAPI, phone_cache: C
                     )
                     return
         except Exception as e:
-            AppLogger().log_user_activity(
+            AppLogger().log_user_activity_error(
                 message.from_user,
                 "Ошибка добавления номера",
                 f"Номер: {phone}, попытка {attempt}, ошибка: {str(e)}"
@@ -270,7 +294,7 @@ async def handle_phone_number(message: Message, api: MoyskladAPI, phone_cache: C
             if attempt < config.MAX_ATTEMPTS:
                 await asyncio.sleep(config.RETRY_DELAY * attempt)
 
-    AppLogger().log_user_activity(
+    AppLogger().log_user_activity_error(
         message.from_user,
         "Не удалось добавить номер",
         f"Номер: {phone} после {config.MAX_ATTEMPTS} попыток"
@@ -284,14 +308,14 @@ async def handle_phone_number(message: Message, api: MoyskladAPI, phone_cache: C
 @router.message(F.document, CounterpartyCreationStates.ACTIVE)
 async def handle_excel_file(message: Message, api: MoyskladAPI, phone_cache: CacheManager, config: Settings):
     """Обработка Excel-файла с номерами в режиме создания контрагента."""
-    AppLogger().log_user_activity(
+    AppLogger().log_user_activity_info(
         message.from_user,
         "Попытка загрузить файл",
         f"Имя файла: {message.document.file_name}, размер: {message.document.file_size} байт"
     )
 
     if not message.document.file_name.endswith(('.xlsx', '.xls')):
-        AppLogger().log_user_activity(
+        AppLogger().log_user_activity_error(
             message.from_user,
             "Неподдерживаемый формат файла",
             message.document.file_name
@@ -303,7 +327,7 @@ async def handle_excel_file(message: Message, api: MoyskladAPI, phone_cache: Cac
         return
 
     if message.document.file_size > MAX_FILE_SIZE:
-        AppLogger().log_user_activity(
+        AppLogger().log_user_activity_error(
             message.from_user,
             "Файл слишком большой",
             f"Размер: {message.document.file_size} байт"
@@ -319,7 +343,7 @@ async def handle_excel_file(message: Message, api: MoyskladAPI, phone_cache: Cac
         phones = await process_excel(file)
 
         if not phones:
-            AppLogger().log_user_activity(
+            AppLogger().log_user_activity_error(
                 message.from_user,
                 "Номера не найдены в файле",
                 message.document.file_name
@@ -331,7 +355,7 @@ async def handle_excel_file(message: Message, api: MoyskladAPI, phone_cache: Cac
             return
 
         total = len(phones)
-        AppLogger().log_user_activity(
+        AppLogger().log_user_activity_info(
             message.from_user,
             "Начал обработку файла",
             f"Файл: {message.document.file_name}, номеров: {total}"
@@ -364,7 +388,7 @@ async def handle_excel_file(message: Message, api: MoyskladAPI, phone_cache: Cac
             f"• Пропущено (дубликаты): <b>{skipped}</b>\n"
             f"• Ошибок: <b>{len(failed)}</b>"
         )
-        AppLogger().log_user_activity(
+        AppLogger().log_user_activity_info(
             message.from_user,
             "Завершил обработку файла",
             f"Файл: {message.document.file_name}, результат: {result}"
@@ -376,7 +400,7 @@ async def handle_excel_file(message: Message, api: MoyskladAPI, phone_cache: Cac
         )
 
     except Exception as e:
-        AppLogger().log_user_activity(
+        AppLogger().log_user_activity_error(
             message.from_user,
             "Ошибка обработки файла",
             f"Файл: {message.document.file_name}, ошибка: {str(e)}"

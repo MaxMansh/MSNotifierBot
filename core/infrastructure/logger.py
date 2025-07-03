@@ -62,8 +62,24 @@ class AppLogger:
             return logging.getLogger(f"app.{name}")
         return self.logger
 
-    def log_user_activity(self, user: User, action: str, details: str = "") -> None:
-        """Логирует действия пользователя с подробной информацией"""
+    def log_user_activity_debug(self, user: User, action: str, details: str = "") -> None:
+        """Логирует действия пользователя с уровнем DEBUG"""
+        self._log_user_activity(user, action, details, "debug")
+
+    def log_user_activity_info(self, user: User, action: str, details: str = "") -> None:
+        """Логирует действия пользователя с уровнем INFO"""
+        self._log_user_activity(user, action, details, "info")
+
+    def log_user_activity_warning(self, user: User, action: str, details: str = "") -> None:
+        """Логирует действия пользователя с уровнем WARNING"""
+        self._log_user_activity(user, action, details, "warning")
+
+    def log_user_activity_error(self, user: User, action: str, details: str = "") -> None:
+        """Логирует действия пользователя с уровнем ERROR"""
+        self._log_user_activity(user, action, details, "error")
+
+    def _log_user_activity(self, user: User, action: str, details: str, level: str) -> None:
+        """Внутренний метод для логирования действий пользователя"""
         user_info = (
             f"Пользователь: ID={user.id}, "
             f"Имя={user.full_name}, "
@@ -74,7 +90,17 @@ class AppLogger:
             log_message += f" | Детали: {details}"
 
         logger = self.get_logger("user_activity")
-        logger.info(log_message)
+
+        if level == "debug":
+            logger.debug(log_message)
+        elif level == "info":
+            logger.info(log_message)
+        elif level == "warning":
+            logger.warning(log_message)
+        elif level == "error":
+            logger.error(log_message)
+        else:
+            logger.info(log_message)
 
 
 # Fallback логгер на случай проблем с инициализацией
