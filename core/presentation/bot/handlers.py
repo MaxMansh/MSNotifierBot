@@ -52,8 +52,8 @@ router.message.middleware(check_access_middleware)
 def get_main_keyboard() -> ReplyKeyboardMarkup:
     """Создает основную клавиатуру для пользователя."""
     buttons = [
-        [KeyboardButton(text="➕ Создание контрагента"), KeyboardButton(text="🔄 Статус")],
-        [KeyboardButton(text="ℹ️ Помощь"), KeyboardButton(text="🔐 Админ-панель")]
+        [KeyboardButton(text="➕ Создание контрагента")],
+        [KeyboardButton(text="🔄 Статус"), KeyboardButton(text="ℹ️ Помощь"), KeyboardButton(text="🔐 Админ-панель")]
     ]
     return ReplyKeyboardMarkup(keyboard=buttons, resize_keyboard=True)
 

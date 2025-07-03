@@ -1,5 +1,5 @@
 from typing import List
-
+from pydantic import validator, Field
 from pydantic_settings import BaseSettings
 from pathlib import Path
 
@@ -7,8 +7,6 @@ class Settings(BaseSettings):
     BOT_TOKEN: str
     MS_TOKEN: str
     CHAT_ID: str
-    ALLOWED_USER_IDS: List[int] = []
-    ADMIN_USER_IDS: List[int] = []
     CHECK_INTERVAL_MINUTES: int = 720
     TG_MESSAGE_LIMIT: int = 4096
     DAYS_TO_KEEP: int = 30
@@ -17,6 +15,14 @@ class Settings(BaseSettings):
     API_REQUEST_DELAY: int = 5
     MAX_ATTEMPTS: int = 5       # Максимальное количество попыток
     RETRY_DELAY: int = 60       # Базовая задержка между попытками (сек)
+    ALLOWED_USER_IDS: List[int] = Field(default=[], description="Список разрешенных пользователей")
+    ADMIN_USER_IDS: List[int] = Field(default=[], description="Список администраторов")
+
+    @validator('ALLOWED_USER_IDS', 'ADMIN_USER_IDS', pre=True)
+    def parse_ids(cls, v):
+        if isinstance(v, str):
+            return [int(i) for i in v.split(',') if i]
+        return v or []
 
 
     class Config:
