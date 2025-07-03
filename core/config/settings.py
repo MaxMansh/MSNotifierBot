@@ -8,6 +8,7 @@ class Settings(BaseSettings):
     MS_TOKEN: str
     CHAT_ID: str
     ALLOWED_USER_IDS: List[int] = []
+    ADMIN_USER_IDS: List[int] = []
     CHECK_INTERVAL_MINUTES: int = 720
     TG_MESSAGE_LIMIT: int = 4096
     DAYS_TO_KEEP: int = 30
@@ -16,6 +17,7 @@ class Settings(BaseSettings):
     API_REQUEST_DELAY: int = 5
     MAX_ATTEMPTS: int = 5       # Максимальное количество попыток
     RETRY_DELAY: int = 60       # Базовая задержка между попытками (сек)
+
 
     class Config:
         env_file = ".env"

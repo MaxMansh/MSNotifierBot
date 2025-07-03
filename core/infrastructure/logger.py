@@ -1,6 +1,7 @@
 import logging
 from logging.handlers import TimedRotatingFileHandler
 from pathlib import Path
+from aiogram.types import User
 from core.config import Settings
 
 class AppLogger:
@@ -60,6 +61,20 @@ class AppLogger:
         if name:
             return logging.getLogger(f"app.{name}")
         return self.logger
+
+    def log_user_activity(self, user: User, action: str, details: str = "") -> None:
+        """Логирует действия пользователя с подробной информацией"""
+        user_info = (
+            f"Пользователь: ID={user.id}, "
+            f"Имя={user.full_name}, "
+            f"Никнейм=@{user.username}" if user.username else "Без никнейма"
+        )
+        log_message = f"{user_info} | Действие: {action}"
+        if details:
+            log_message += f" | Детали: {details}"
+
+        logger = self.get_logger("user_activity")
+        logger.info(log_message)
 
 
 # Fallback логгер на случай проблем с инициализацией
