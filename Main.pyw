@@ -113,8 +113,9 @@ class BotApplication:
         self.phone_cache._save_cache()
 
         # Загрузка контрагентов через API
-        if not await api.initialize_counterparties_cache(self.phone_cache):
-            self.logger.warning("Не удалось загрузить контрагентов при старте")
+        # if not await api.initialize_counterparties_cache(self.phone_cache):
+        #     self.logger.warning("Не удалось загрузить контрагентов при старте")
+        self.logger.info("Пропущена начальная загрузка контрагентов - теперь это делается через админ-панель")
 
         # Настройка диспетчера
         self.dp = Dispatcher()

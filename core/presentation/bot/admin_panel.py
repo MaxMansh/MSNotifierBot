@@ -1,4 +1,3 @@
-
 import os
 from datetime import datetime, timedelta
 from collections import defaultdict
@@ -29,11 +28,16 @@ class AccessControlStates(StatesGroup):
     VIEW_LOG_FILE = State()  # Состояние для просмотра лог-файлов
 
 
+class CacheControlStates(StatesGroup):
+    """Состояния для управления кэшем"""
+    CHOOSE_ACTION = State()  # Выбор действия в меню управления кэшем
+
+
 def get_admin_keyboard() -> ReplyKeyboardMarkup:
     """Создает клавиатуру для админ-панели."""
     buttons = [
         [KeyboardButton(text="📁 Логи"), KeyboardButton(text="📊 Статистика")],
-        [KeyboardButton(text="🗑️ Очистить кэш"), KeyboardButton(text="⏰ Следующая проверка")],
+        [KeyboardButton(text="🗑️ Управление кэшем"), KeyboardButton(text="⏰ Следующая проверка")],
         [KeyboardButton(text="ℹ️ Информация о боте"), KeyboardButton(text="🔑 Права доступа")],
         [KeyboardButton(text="🔙 Назад")]
     ]
@@ -45,6 +49,15 @@ def get_access_control_keyboard() -> ReplyKeyboardMarkup:
     buttons = [
         [KeyboardButton(text="➕ Добавить пользователя"), KeyboardButton(text="➖ Удалить пользователя")],
         [KeyboardButton(text="➕ Добавить админа"), KeyboardButton(text="➖ Удалить админа")],
+        [KeyboardButton(text="🔙 Назад")]
+    ]
+    return ReplyKeyboardMarkup(keyboard=buttons, resize_keyboard=True)
+
+
+def get_cache_control_keyboard() -> ReplyKeyboardMarkup:
+    """Клавиатура для управления кэшем."""
+    buttons = [
+        [KeyboardButton(text="🔄 Обновить контрагентов"), KeyboardButton(text="🗑️ Очистить кэш")],
         [KeyboardButton(text="🔙 Назад")]
     ]
     return ReplyKeyboardMarkup(keyboard=buttons, resize_keyboard=True)
@@ -79,7 +92,6 @@ async def handle_logs(message: Message, state: FSMContext, paths: PathManager):
         await message.answer("❌ Ошибка при получении списка логов.")
 
 
-
 @router.message(AccessControlStates.VIEW_LOG_FILE)
 async def handle_view_log_file(message: Message, state: FSMContext, paths: PathManager):
     """Обработка выбора лог-файла из списка кнопок."""
@@ -103,18 +115,21 @@ async def handle_view_log_file(message: Message, state: FSMContext, paths: PathM
             await message.answer("❌ Файл не найден.")
             return
 
-        # Исправленный способ отправки файла
         await message.answer_document(
-            document=types.FSInputFile(log_path),  # Используем FSInputFile
+            document=types.FSInputFile(log_path),
             caption=f"📄 Вот ваш лог-файл: {message.text}"
         )
         AppLogger().log_user_activity(message.from_user, "Успешно отправлен лог-файл", f"Имя файла: {message.text}")
 
+        # После отправки файла автоматически возвращаемся в админ-панель
+        await state.clear()
+        await message.answer("🔐 Админ-панель", reply_markup=get_admin_keyboard())
+
     except Exception as e:
         AppLogger().log_user_activity(message.from_user, "Ошибка при отправке лог-файла", f"Ошибка: {str(e)}")
         await message.answer("❌ Ошибка при отправке файла логов.")
-    finally:
         await state.clear()
+        await message.answer("🔐 Админ-панель", reply_markup=get_admin_keyboard())
 
 
 @router.message(F.text == "📊 Статистика")
@@ -131,18 +146,46 @@ async def handle_stats(message: Message):
     await message.answer(stats_text, parse_mode="HTML")
 
 
-@router.message(F.text == "🗑️ Очистить кэш")
-async def handle_clear_cache(message: Message, phone_cache: CacheManager, api: MoyskladAPI):
-    """Обработка очистки кэша."""
-    AppLogger().log_user_activity(message.from_user, "Очистка кэша")
-    try:
+@router.message(F.text == "🗑️ Управление кэшем")
+async def handle_cache_control_menu(message: Message, state: FSMContext):
+    """Обработка входа в меню управления кэшем."""
+    AppLogger().log_user_activity(message.from_user, "Открыл меню управления кэшем")
+    await state.set_state(CacheControlStates.CHOOSE_ACTION)
+    await message.answer(
+        "Управление кэшем:",
+        reply_markup=get_cache_control_keyboard()
+    )
+
+
+@router.message(CacheControlStates.CHOOSE_ACTION)
+async def handle_cache_action(message: Message, state: FSMContext, phone_cache: CacheManager, api: MoyskladAPI):
+    """Обработка выбора действия в управлении кэшем."""
+    AppLogger().log_user_activity(message.from_user, f"Выбрал действие в кэше: {message.text}")
+
+    if message.text == "🔄 Обновить контрагентов":
+        await message.answer("🔄 Обновление списка контрагентов...")
+        try:
+            success = await api.initialize_counterparties_cache(phone_cache)
+            if success:
+                await message.answer("✅ Список контрагентов успешно обновлен!")
+            else:
+                await message.answer("❌ Не удалось обновить список контрагентов")
+        except Exception as e:
+            await message.answer(f"❌ Ошибка при обновлении: {str(e)}")
+
+    elif message.text == "🗑️ Очистить кэш":
         await message.answer("🔄 Очистка кэша...")
-        phone_cache.clear_cache()
-        await api.initialize_counterparties_cache(phone_cache)
-        await message.answer("✅ Кэш успешно очищен и обновлен.")
-    except Exception as e:
-        AppLogger().log_user_activity(message.from_user, "Ошибка при очистке кэша", f"Ошибка: {str(e)}")
-        await message.answer("❌ Ошибка при очистке кэша.")
+        try:
+            phone_cache.clear_cache()
+            await message.answer("✅ Кэш успешно очищен!")
+        except Exception as e:
+            await message.answer(f"❌ Ошибка при очистке кэша: {str(e)}")
+
+    elif message.text == "🔙 Назад":
+        await state.clear()
+        await message.answer("🔐 Админ-панель", reply_markup=get_admin_keyboard())
+
+    await state.clear()
 
 
 @router.message(F.text == "⏰ Следующая проверка")

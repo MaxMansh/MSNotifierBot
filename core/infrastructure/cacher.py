@@ -116,3 +116,13 @@ class CacheManager:
         except Exception as e:
             logger.error(f"Ошибка проверки срока годности кэша: {str(e)}")
             return True
+
+    def clear_cache(self) -> None:
+        """Полностью очищает кэш контрагентов"""
+        try:
+            self.cache_data['counterparties'] = {}
+            self._save_cache()
+            logger.info("Кэш контрагентов полностью очищен")
+        except Exception as e:
+            logger.error(f"Ошибка при очистке кэша: {str(e)}")
+            raise
